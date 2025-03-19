@@ -1,0 +1,1811 @@
+<?php
+
+// input format of specific date : YYYY-m-d
+function getCustomAnnualLeave(string $specific_date=null, string $user_id=null){
+	if ($user_id == null){
+		$userRecord = $_SESSION['login_account'];
+	}else {
+		$userRecord = getUserRecord($user_id);
+	}
+
+	if ($userRecord =='')
+		return 0;
+
+	if ($specific_date == null){
+		$requested_date = date('YYYY-mm-dd');
+	}else {
+		$requested_date = $specific_date;
+	}
+
+	if ($userRecord['custom_annual_leave_entitlement'] > 0){
+
+		$hdb = getConnection();
+		$sql = "select * from custom_annual_leave where user_id=:user_id and start_date >= :requested_date order by updated_at desc";
+		$parameters = array('user_id'=>$userRecord['id'], 'requested_date'=>$requested_date);
+		$result = $hdb->query($sql,$parameters);
+
+		if (count($result) >0){
+			return $result[0]['annual_day'];
+		}
+	}
+	return 0;
+
+}
+
+
+///*************************************************************************************
+// input format of specific date : YYYY-m-d
+function getYearOfEmployment(string $specific_date=null, string $user_id=null){
+
+	if ($user_id == null){
+		$userRecord = $_SESSION['login_account'];
+	}else {
+		$userRecord = getUserRecord($user_id);
+	}
+
+	if ($userRecord == '')
+		return 0;
+
+	$join_date = new DateTime($userRecord['joindate']);
+
+	if ($specific_date == null){
+		$requested_date = new DateTime();
+	}else {
+		$requested_date = new DateTime($specific_date);
+	}
+
+	$interval = $join_date->diff($requested_date);
+
+	//echo 'total_days_worked: '.$interval->format('%R%a') .'<br>';
+	// Is 1 if the interval represents a negative time period and 0 otherwise
+	$total_days_worked = ($interval->days+1) * ( $interval->invert ? -1 : 1);   // nb: ->days always positive
+
+	if ($total_days_worked <=0){
+		return 0;
+		exit;
+	}
+
+	$year_of_employment = $interval->y;
+
+	return $year_of_employment;
+
+}
+
+///*************************************************************************************
+// return the specific year annual leave entitlement
+function getAnnualLeaveEntitlement(string $year=null, string $user_id=null){
+	global $_SESSION;
+
+	if ($user_id == null){
+		$userRecord = $_SESSION['login_account'];
+	}else {
+		$userRecord = getUserRecord($user_id);
+	}
+
+	if ($userRecord == '')
+		return 0;
+
+	if ($year == null){
+		$end_of_year = new DateTime();
+	}else {
+		$end_of_year = new DateTime($year);
+	}
+
+	$join_date = $userRecord['joindate'];
+	$num_of_days_work_per_week = $userRecord['num_day_work_per_week'];
+
+	$join_date = new DateTime($join_date);
+	$join_date->modify('-1 day');
+
+	$interval = $join_date->diff($end_of_year);
+
+	$year_of_employment = $interval->y;
+//	echo 'num of year worked:'. $year_of_employment.'<br>';
+	$custom_leave_day = $userRecord['custom_annual_leave_entitlement'];
+
+	$balance = 0;
+	/*if ($year_of_employment ==1){
+		//$num_vacation_of_reminder_year_perday = getNumberOfAnnualLeavePerDay($end_of_year->format('Y-m-d'));
+
+		$reminder_of_day_of_year_of_employment = $interval->days % $iOneYear;
+		echo "reminder_of_day_of_year_of_employment after $year_of_employment years = $reminder_of_day_of_year_of_employment <br>";
+		echo "num_vacation_of_reminder_year_perday = $num_vacation_of_reminder_year_perday <br>";
+		$balance = $reminder_of_day_of_year_of_employment * $num_vacation_of_reminder_year_perday;
+	}else*/if ($year_of_employment >=1 && $year_of_employment <=5){
+		$balance = $custom_leave_day>0 ?  $custom_leave_day : $num_of_days_work_per_week *2 ;
+		//$balance = $balance + ANNUAL_LEAVE_AFTER_1_YEAR;
+
+	}elseif ($year_of_employment >=6 && $year_of_employment <=10){
+		$balance = $custom_leave_day>0 ?  $custom_leave_day + $num_of_days_work_per_week  : ($num_of_days_work_per_week*3) ;
+
+	}elseif ($year_of_employment >=11 ){
+		$balance =  $custom_leave_day>0 ?  $custom_leave_day + ($num_of_days_work_per_week*2) :  ($num_of_days_work_per_week*4) ;
+	}
+
+	return $balance;
+}
+
+///*************************************************************************************
+// if $specific_date =0 , return the number of leave entitlement
+// otherwise, return the number of leave entitlement on that specific day
+// input format of specific date : YYYY-m-d
+// if there is 20 unpaid days, the number of annual leave per year = (345/365 * 10)
+function getNumberOfAnnualLeavePerDay(string $specific_date=null, string $user_id=null,  bool $bShowDebug=true){
+
+	if ($user_id == null){
+		$userRecord = $_SESSION['login_account'];
+	}else {
+		$userRecord = getUserRecord($user_id);
+		if ($userRecord =='')
+		return 0;
+	}
+
+	$balance = 0 ;
+
+	if ($specific_date == null){
+		$requested_date = new DateTime();
+		//$year = date('Y');
+		//$current_month = date('n');
+	}else {
+		$requested_date = new DateTime($specific_date);
+		//$year = $requested_date->format('Y');
+		//$current_month = $requested_date->format('n');
+	}
+
+	$iOneYear = isLeapYear($requested_date->format('Y')) ? 366 : 365;
+
+	$join_date = new DateTime($userRecord['joindate']);
+
+	$num_of_days_work_per_week = $userRecord['num_day_work_per_week'];
+
+
+	// number of year of employment with the same employer
+	$interval = $join_date->diff($requested_date);
+
+	//  1 if the interval represents a negative time period and 0 otherwise
+	$total_days_worked = ($interval->days+1) * ( $interval->invert ? -1 : 1);   // nb: ->days always positive
+
+	//echo 'total_days_worked: '.$interval->format('%R%a') .'<br>';
+	if ($total_days_worked <=0){
+		return 0;
+		exit;
+	}
+
+	//**** get how many unpaid days that cant earn annual leave
+	$date1 = strtotime($requested_date->format('Y-m-d'));
+	$date2 = strtotime(date('Y-m-d'));
+	if($date1 > $date2){
+		$date1 = $date2;
+	}
+	//$unPaidDays = getUnpaidDays_Cant_Earn_AnnualLeave(date("Y-m-d", $date1), $userRecord['id']);
+
+	//if ($bShowDebug) echo "<!--unPaidDays = $unPaidDays --> \r\n";
+
+	//$iPaidDaysPercent_OverYear = ($iOneYear-$unPaidDays) / $iOneYear;
+
+	$year_of_employment = $interval->y;
+
+	$custom_leave_day = getCustomAnnualLeave($requested_date->format('Y-m-d'), $userRecord['id']);
+
+	$balance = $custom_leave_day>0 ?  $custom_leave_day : $num_of_days_work_per_week*2 ;
+
+	//if ($bShowDebug)  echo "<!--iPaidDaysPercent_OverYear = ($iOneYear-$unPaidDays) / $iOneYear = $iPaidDaysPercent_OverYear --> \r\n";
+	// if there is 20 unpaid days, the number of annual leave per year = (345/365 * 10)
+	// calculate the last year balance
+	$num_vacation_of_perday = 0;
+	if ($year_of_employment >=0 && $year_of_employment <=5){
+		$num_vacation_of_perday = ( $balance) / $iOneYear;
+
+	}elseif ($year_of_employment >=6 && $year_of_employment <=10){
+		$num_vacation_of_perday = (($balance + $num_of_days_work_per_week))/ $iOneYear;
+
+	}elseif ($year_of_employment >=11 ){
+		$num_vacation_of_perday = (($balance + ($num_of_days_work_per_week *2)))/ $iOneYear;
+	}
+	//echo "num_vacation_per day after $year_of_employment years= $num_vacation_of_perday <br>";
+	//echo "total employment days = ".$interval->days ." <br>";
+
+	//return round($num_vacation_of_perday, 2);
+	return $num_vacation_of_perday;
+}
+
+///*************************************************************************************
+// if $specific_date =0 , return the number of leave entitlement up to day
+// otherwise, return the number of leave entitlement up to the specific day
+// input format of specific date : YYYY-m-d
+function calculateTotalLeaveEntitlement_without_startbalance(string $specific_date=null, $userRecord, bool $bEntitlementCanUse = false, bool $bShowDebug=true){
+
+	$balance = 0 ;
+
+	if ($specific_date == null){
+		$today = new DateTime();
+	}else {
+		$today = new DateTime($specific_date);
+	}
+
+	//$iOneYear = isLeapYear($today->format('Y')) ? 366 : 365;
+	//$iOneYear = 365;
+
+	$join_date = new DateTime($userRecord['joindate']);
+	$join_date->modify('-1 day');
+
+	// number of year of employment with the same employer
+	$interval = $join_date->diff($today);
+	$year_of_employment = $interval->y;
+
+	if ($bShowDebug) { echo '<!--  num of year worked ='. $year_of_employment . '--> '; }
+
+	$num_of_days_work_per_week = $userRecord['num_day_work_per_week'];
+	$extra_annual_days_entitlement = 0;
+
+	$hdb = getConnection();
+	$join_date = new DateTime($userRecord['joindate']);
+	$newStartDate = clone $join_date;
+
+	for($n = 1; $n<= $year_of_employment; $n++){
+
+		$newEndYear = clone $newStartDate;
+		$newEndYear->modify('+1 year');
+		$newEndYear->modify("-1 day");
+
+
+		//at least 2 weeks of vacation annually once you have completed 1 year of continuous employment with the same employer
+		if ($n <=5 ){
+			$extra_annual_days_entitlement = 0;
+			$balance1 = getAnnualLeaveEntitlementFromCustomPackage($newStartDate->format('Y-m-d'), $newEndYear->format('Y-m-d'), $userRecord, $bShowDebug);
+
+			if ($balance1 >0){
+				$balance += $balance1;
+			}elseif ($balance1 ==0){  // no custome annual entitlement package
+				$balance = $balance + ($num_of_days_work_per_week *2);
+			}
+
+
+		// at least 3 weeks of vacation annually after 5 consecutive years of working for the same employer, and
+		}elseif ($n >=6 && $n <=10 ){
+			$extra_annual_days_entitlement = $num_of_days_work_per_week;
+
+			$balance1 = getAnnualLeaveEntitlementFromCustomPackage( $newStartDate->format('Y-m-d'), $newEndYear->format('Y-m-d'), $userRecord, $bShowDebug);
+			if ($balance1 >0){
+				$balance += $balance1;
+			}elseif ($balance1 ==0){  // no custome annual entitlement package
+				$balance = $balance + ($num_of_days_work_per_week *2) + $extra_annual_days_entitlement;
+			}
+
+
+		}elseif ($n >= 11 ){
+			$extra_annual_days_entitlement = $num_of_days_work_per_week * 2;
+
+			$balance1 = getAnnualLeaveEntitlementFromCustomPackage($newStartDate->format('Y-m-d'), $newEndYear->format('Y-m-d'), $userRecord, $bShowDebug);
+			if ($balance1 >0){
+				$balance += $balance1;
+			}elseif ($balance1 ==0){  // no custome annual entitlement package
+				$balance = $balance + ($num_of_days_work_per_week *2) + $extra_annual_days_entitlement;
+			}
+		}
+
+		if ($bShowDebug) {
+			echo "<!-- annual balance without startbalance
+				$n Year : $balance  -->  \r\n";
+		}
+
+		$newEndYear->modify("+1 day");
+		$newStartDate = clone $newEndYear;
+	}
+
+
+	//*********** calculate the reminder days *********************
+	$newEndYear = new DateTime($specific_date);
+
+	$balance1 = getAnnualLeaveEntitlementFromCustomPackage($newStartDate->format('Y-m-d'), $newEndYear->format('Y-m-d'), $userRecord, $bShowDebug);
+	if ($balance1 >0){
+		$balance += $balance1;
+		return round($balance, 2);
+
+	}else{  // no custom annual entitlement package
+
+		$num_vacation_of_reminder_year_perday = getNumberOfAnnualLeavePerDay($specific_date, $userRecord['id'], $bShowDebug);
+		if ($bShowDebug) { echo "<!-- num_vacation_of_reminder_year_perday = " .$num_vacation_of_reminder_year_perday ." --> \r\n"; }
+
+		//$join_month_day = new DateTime(substr($specific_date, 0,4) .'-'. $newStartDate->format('m-d'));
+
+		$num_nopaid_days = getTotalUnpaidDays($userRecord['id'], $newStartDate->format('Y-m-d'), $newEndYear->format('Y-m-d') );
+
+		$reminder_of_day_of_year_of_employment = $newStartDate->diff($newEndYear)->days + 1;
+		//$reminder_of_day_of_year_of_employment = $interval->days % $iOneYear;
+
+		if ($bShowDebug) { echo "<!-- num_nopaid_days = $num_nopaid_days --> \r\n";  }
+
+		if ($bShowDebug) { echo "<!-- reminder_of_day_of_year_of_employment after $year_of_employment years = $interval->days, $reminder_of_day_of_year_of_employment --> \r\n";  }
+
+		$reminder_vacation_balance = $reminder_of_day_of_year_of_employment * ($num_vacation_of_reminder_year_perday -$num_nopaid_days) ;
+
+		if ($bShowDebug) echo "<!-- *** reminder vacation balance = $reminder_vacation_balance -->  \r\n ";
+		return round($balance+$reminder_vacation_balance, 2);
+	}
+
+}
+
+
+
+///*************************************************************************************
+// the format of $requestStartDate and $requestEndDate is YYYY-mm-dd
+// requestStartDate and requestEndDate must be within the same year of employment
+function getAnnualLeaveEntitlementFromCustomPackage($requestStartDate, $requestEndDate, $userRecord, bool $bShowDebug=true){
+
+	if ($bShowDebug) echo "<!-- START checking custom package<br> \r\n";
+	if ($bShowDebug) echo "--> \r\n";
+
+	$balance = 0;
+	$hdb = getConnection();
+	$sql = "Select * from custom_annual_leave where user_id=:user_id
+			and start_date!=end_date and
+			(
+			(start_date <= :end_date AND end_date >= :start_date )	OR
+			(start_date <= :end_date1 AND end_date ='0000-00-00')
+			)
+			order by start_date";
+
+	$parameters = array('user_id'=>$userRecord['id'],
+						'start_date'=>$requestStartDate,
+						'end_date'=>$requestEndDate,
+						'end_date1'=>$requestEndDate,
+						);
+	if ($bShowDebug) echo '<!-- '.$hdb->odo_sql_debug($sql, $parameters) . "--> \r\n";
+	$num_employment = getYearOfEmployment($requestEndDate, $userRecord['id']);
+	$extra_annual_days_entitlement = 0;
+	if ($num_employment >=6 && $num_employment <=10)
+		$extra_annual_days_entitlement = $userRecord['num_day_work_per_week'];
+	elseif ($num_employment >= 11)
+		$extra_annual_days_entitlement = $userRecord['num_day_work_per_week'] * 2;
+
+	if ($bShowDebug) echo "<!-- *** num of employment year= {$num_employment}, extra_annual_days_entitlement={$extra_annual_days_entitlement} --> \r\n";
+
+	$result = $hdb->query($sql,$parameters);
+	if (count($result) >0){
+		foreach($result as $k => $v){
+			$start_date = new DateTime($v['start_date']);
+			$end_date = new DateTime($v['end_date']);
+
+			$iOneYear = isLeapYear(substr($v['end_date'], 0, 4) ) ? 366 : 365;
+
+			if ($bShowDebug) echo "<!-- *** Year ".substr($v['end_date'], 0, 4)." is leap year= ".isLeapYear(substr($v['end_date'], 0, 4) )." --> \r\n";
+
+			$annual_leave = $v['annual_day']+  $extra_annual_days_entitlement;
+			$num_leave_perday =  $annual_leave/$iOneYear;
+
+				if( $v['end_date'] >= $requestEndDate && ($v['end_date'] != '0000-00-00') ){
+					if ($bShowDebug) echo "<!-- *** CUSTOM PACKAGE 1st part: [{$v['end_date']}] >= $requestEndDate --> \r\n";
+					$tmp = new DateTime($requestStartDate);
+					$diff_days =  $tmp->diff( new DateTime ($requestEndDate))->days+1;
+					$annual_leave1 = $diff_days * $num_leave_perday  ;
+					$num_nopaid_days = getTotalUnpaidDays($userRecord['id'], $requestStartDate, $requestEndDate );
+					$nopaid = $num_nopaid_days * $num_leave_perday;
+					$balance = $balance + $annual_leave1 - $nopaid;
+
+					$requestStartDate  = clone (new DateTime($v['end_date']));
+					$requestStartDate->modify("+1 day");
+					$requestStartDate = $requestStartDate->format('Y-m-d');
+
+
+
+				//$balance = $balance + $annual_leave1;
+
+				if ($bShowDebug) {
+				 echo '<!--';
+					echo "different days: ".$diff_days."<br> \r\n ";
+					echo "num_vacation_perday = ". ($num_leave_perday) ." <br> \r\n";
+					echo "annual_leave: ".$annual_leave."<br> \r\n ";
+					echo "annual_leave in that period: ".$annual_leave1."<br> \r\n ";
+					echo "num_nopaid_days: ".$num_nopaid_days."<br> \r\n ";
+					echo "balance = $balance \r\n <br>";
+					echo "--> \r\n";
+				}
+
+				}elseif( $v['end_date'] <= $requestEndDate && ($v['end_date'] != '0000-00-00') ){
+					if ($bShowDebug) echo "<!-- *** CUSTOM PACKAGE 2nd part: [{$v['end_date']}] <= $requestEndDate --> \r\n";
+					$tmp = new DateTime($requestStartDate);
+					$diff_days =  $tmp->diff( new DateTime ($v['end_date']))->days + 1;
+					$annual_leave1 = $diff_days * $num_leave_perday ;
+					$num_nopaid_days = getTotalUnpaidDays($userRecord['id'], $requestStartDate, $v['end_date'] );
+					$nopaid = $num_nopaid_days * $num_leave_perday;
+					$balance = $balance + $annual_leave1 - $nopaid;
+
+					$requestStartDate  = clone (new DateTime($v['end_date']));
+					$requestStartDate->modify("+1 day");
+					$requestStartDate = $requestStartDate->format('Y-m-d');
+
+
+				//$balance = $balance + $annual_leave1;
+				if ($bShowDebug) {
+					echo '<!--';
+					echo "different days: ".$diff_days."<br> \r\n ";
+					echo "num_vacation_perday = ". ($num_leave_perday) ." <br> \r\n";
+					echo "annual_leave: ".$annual_leave."<br> \r\n ";
+					echo "annual_leave in that period: ".$annual_leave1."<br> \r\n ";
+					echo "num_nopaid_days: ".$num_nopaid_days."<br> \r\n ";
+					echo "balance = $balance \r\n <br>";
+					echo "--> \r\n";
+				}
+
+				}elseif ($v['end_date'] == '0000-00-00') {  //$v['end_date'] < $requestEndDate
+
+					$iOneYear = isLeapYear(substr($requestEndDate, 0, 4) ) ? 366 : 365;
+					if ($bShowDebug) echo "<!-- *** Year ".substr($requestEndDate, 0, 4)." is leap year= ".isLeapYear(substr($requestEndDate, 0, 4) )." --> \r\n";
+					$annual_leave = $v['annual_day']+  $extra_annual_days_entitlement;
+					$num_leave_perday =  $annual_leave/$iOneYear;
+
+					if ($bShowDebug) echo "<!-- *** CUSTOM PACKAGE 3rd part: db end date == '0000' --> \r\n";
+					$tmp = new DateTime($requestStartDate);
+					$diff_days =  $tmp->diff( new DateTime ($requestEndDate))->days + 1 ;
+					$annual_leave1 = $diff_days * $num_leave_perday;
+					$num_nopaid_days = getTotalUnpaidDays($userRecord['id'], $requestStartDate, $requestEndDate);
+					$nopaid = $num_nopaid_days * $num_leave_perday;
+					$balance = $balance + $annual_leave1 - $nopaid;
+
+				//$balance = $balance + $annual_leave1;
+
+					if ($bShowDebug) {
+						echo '<!--';
+						echo "different days: ".$diff_days."<br> \r\n ";
+						echo "num_vacation_perday = ". ($num_leave_perday) ." <br> \r\n";
+						echo "annual_leave: ".$annual_leave."<br> \r\n ";
+						echo "annual_leave in that period: ".$annual_leave1."<br> \r\n ";
+						echo "num_nopaid_days: ".$num_nopaid_days."<br> \r\n ";
+						echo "balance = $balance \r\n <br>";
+						echo "--> \r\n";
+					}
+				}
+		}
+
+
+
+	}
+
+	if ($bShowDebug) echo "<!-- END of checking custom package \r\n--> \r\n\r\n";
+
+	return $balance;
+}
+
+///*************************************************************************************
+// if $specific_date =0 , return the number of leave entitlement up to day
+// otherwise, return the number of leave entitlement up to the specific day
+// input format of specific date : YYYY-m-d
+function calculateTotalLeaveEntitlement(string $specific_date=null, string $user_id=null, bool $bEntitlementCanUse=true, bool $bShowDebug=true, string $end_date_of_annual_leave_taken=null ,  string $sStatus_sql='' ){
+
+
+	if ($user_id == null){
+		$userRecord = $_SESSION['login_account'];
+	}else {
+		$userRecord = getUserRecord($user_id);
+	}
+
+	if ($userRecord == '')
+		return 0;
+
+	//$iOneYear = 365;
+	$user_id = $userRecord['id'];
+	$balance = 0 ;
+
+	if ($specific_date == null){
+		$requested_date = new DateTime();
+		$year = date('Y');
+		$current_month = date('n');
+	}else {
+		$requested_date = new DateTime($specific_date);
+		$year = $requested_date->format('Y');
+		$current_month = $requested_date->format('n');
+	}
+
+	$iOneYear = isLeapYear($year) ? 366 : 365;
+
+	$join_date = new DateTime($userRecord['joindate']);
+	$interval = $join_date->diff($requested_date);
+
+	// Is 1 if the interval represents a negative time period and 0 otherwise
+	$total_days_worked = ($interval->days+1) * ( $interval->invert ? -1 : 1);   // nb: ->days always positive
+
+
+	//echo 'total_days_worked: '.$total_days_worked .'<br>';
+	if ($bEntitlementCanUse==false && $total_days_worked < $iOneYear){
+		return 0;
+		exit;
+	}
+
+	// get the starting balance value from leave_balance table
+	$tmp = getBalanceForwardFromDB('ANNUAL', $user_id);
+	if (count($tmp)>0){
+		$beginning_balance = $tmp['balance'];
+		$beginning_balance_date = new DateTime($tmp['balance_date']);
+
+		//$requestStartDate  = clone (new DateTime($v['end_date']));
+		$beginning_balance_date->modify("+1 day");
+		//$beginning_balance_date = $beginning_balance_date->format('Y-m-d');
+
+
+		$beginning_balance_year = $beginning_balance_date->format('Y');
+
+		//$beginnging_balance_month_day = substr($tmp['balance_date'], 5);
+		$join_month_day = new DateTime($beginning_balance_year .'-'. $join_date->format('m-d'));
+
+
+	//	$year_employment = $new_interval->y;
+
+//		echo "join date: " . $userRecord['joindate'].' <br>';
+		if ($bShowDebug) echo "<!-- starting balance= $beginning_balance on {$tmp['balance_date']} <br><br>--> \r\n \r\n";
+
+		$balance = $beginning_balance;
+
+		// e.g. beginning_balance_date: 2023-02-01,  join_month_day: 04-15
+		if ($join_month_day >= $beginning_balance_date){
+
+			if ($bShowDebug)  echo "<!-- *** CASE 1: joined month day >= balance date, {$join_date->format('m-d')} >= [{$tmp['balance_date']}] --> \r\n";
+			// e.g. requested date: 2023-03-01
+			 if ($requested_date < $join_month_day){
+
+				$balance1 = getAnnualLeaveEntitlementFromCustomPackage($beginning_balance_date->format('Y-m-d'), $requested_date->format('Y-m-d'), $userRecord, $bShowDebug);
+				if ($balance1==0){
+					$num_vacation_perday = getNumberOfAnnualLeavePerDay($requested_date->format('Y-m-d'), $userRecord['id'], $bShowDebug);
+
+					$num_nopaid_days = getTotalUnpaidDays($userRecord['id'], $beginning_balance_date->format('Y-m-d'), $requested_date->format('Y-m-d') );
+
+					$balance1 = $num_vacation_perday * (($beginning_balance_date->diff($requested_date)->days + 1)  - $num_nopaid_days);
+
+					if ($bShowDebug) {
+						echo "<!-- *** CASE 1a : requested date < joined month day, {$requested_date->format('Y-m-d')} < [{$join_date->format('m-d')}] --> \r\n";
+						echo '<!--';
+						echo "different days: ".($beginning_balance_date->diff($requested_date)->days+1)."<br> \r\n ";
+						echo "num_vacation_perday = $num_vacation_perday <br> \r\n";
+						echo "num_nopaid_days = $num_nopaid_days \r\n";
+						echo "balance1 = $balance1 \r\n <br>";
+						echo '-->';
+					}
+				}
+				$balance += $balance1;
+
+
+			// e.g. requested date: 2023-06-01 or 2024-02-01 or 2025-03-01
+			 }elseif ($requested_date >= $join_month_day){
+
+				if ($bShowDebug) echo "<!-- *** CASE 1b: requested date >= joined month day, {$requested_date->format('Y-m-d')} >= [{$join_date->format('m-d')}] --> \r\n";
+
+				$oneday_before_join_month_day = clone $join_month_day;
+				$oneday_before_join_month_day->modify("-1 day");
+
+				// first, calculate the # of vacation per day before the join month/day
+				$balance1 = getAnnualLeaveEntitlementFromCustomPackage($beginning_balance_date->format('Y-m-d'), $oneday_before_join_month_day->format('Y-m-d'), $userRecord, $bShowDebug);
+				if ($balance1 ==0){
+					$num_vacation_perday = getNumberOfAnnualLeavePerDay($oneday_before_join_month_day->format('Y-m-d') , $userRecord['id'] , $bShowDebug);
+
+					$num_nopaid_days = getTotalUnpaidDays($userRecord['id'], $beginning_balance_date->format('Y-m-d'), $oneday_before_join_month_day->format('Y-m-d') );
+
+					$balance1 = $num_vacation_perday * (($beginning_balance_date->diff($oneday_before_join_month_day)->days + 1) - $num_nopaid_days);
+
+					if ($bShowDebug) {
+						echo '<!--';
+						echo "different days from {$beginning_balance_date->format('Y-m-d')} : ". ( $beginning_balance_date->diff($oneday_before_join_month_day)->days + 1). "<br> \r\n";
+						echo "num_vacation_perday = $num_vacation_perday on ".$oneday_before_join_month_day->format('Y-m-d')."<br> \r\n";
+						echo "num_nopaid_days = $num_nopaid_days \r\n";
+						echo "balance1 = $balance1 <br><br> \r\n \r\n";
+						echo '-->';
+					}
+
+				}
+				$balance += $balance1;
+
+
+				// e.g. 2026-03-01
+				if ($requested_date->format('Y') > $beginning_balance_year ){
+
+					if ($bShowDebug) echo "<!-- *** CASE 1c: requested date year > beginning balance year, {$requested_date->format('Y')} > [{$beginning_balance_year}]  \r\n -->";
+					//echo '2nd (i)case: requested date year > beginning balance year <br>';
+
+					// calculate the # of vacation per day after the join month/day  until end of the year
+					$balance1 = getAnnualLeaveEntitlementFromCustomPackage($join_month_day->format('Y-m-d'), $beginning_balance_year.'-12-31', $userRecord, $bShowDebug);
+					if ($balance1 ==0){
+						$num_vacation_perday = getNumberOfAnnualLeavePerDay($beginning_balance_year . '-12-31', $userRecord['id'], $bShowDebug);
+
+						$num_nopaid_days = getTotalUnpaidDays($userRecord['id'], $join_month_day->format('Y-m-d'), $beginning_balance_year.'-12-31');
+
+						$tmp1 = new DateTime($beginning_balance_year.'-12-31');
+						$balance1 = $num_vacation_perday * (($join_month_day->diff($tmp1)->days + 1) - $num_nopaid_days);
+
+						if ($bShowDebug) {
+							echo '<!--';
+							echo "different days from {$join_month_day->format('Y-m-d')} : ".($join_month_day->diff($tmp1)->days + 1). "<br>\r\n";
+							echo "num_vacation_perday = $num_vacation_perday on ".$tmp1->format('Y-12-31')."<br> \r\n";
+							echo "num_nopaid_days = $num_nopaid_days \r\n";
+							echo "balance1 = $balance1 <br><br> \r\n \r\n";
+							echo '-->';
+						}
+					}
+					$balance += $balance1;
+
+					$balance += calculateVacationLeaveEntitlement_with_request_date_bigger_BalanceYear($requested_date , $userRecord, $bShowDebug);
+
+				}else {   // ($requested_date->format('Y') == $beginning_balance_year ){
+				// calculate the # of vacation after the join month/day until the requested date if same year
+
+					if ($bShowDebug) echo "<!-- *** CASE 1d: requested date year = beginning balance year, {$requested_date->format('Y')} = [{$beginning_balance_year}]  --> \r\n";
+
+					$balance2 = getAnnualLeaveEntitlementFromCustomPackage($join_month_day->format('Y-m-d'), $requested_date->format('Y-m-d'), $userRecord, $bShowDebug);
+					if ($balance2 ==0){
+						$num_vacation_perday = getNumberOfAnnualLeavePerDay($requested_date->format('Y-m-d'), $userRecord['id'], $bShowDebug);
+
+						$num_nopaid_days = getTotalUnpaidDays($userRecord['id'], $join_month_day->format('Y-m-d'), $requested_date->format('Y-m-d') );
+
+
+						$balance2 = $num_vacation_perday * (($join_month_day->diff($requested_date)->days + 1) - $num_nopaid_days);
+
+						if ($bShowDebug) {
+							echo '<!--';
+							echo "different days from {$join_month_day->format('Y-m-d')} : ".( $join_month_day->diff($requested_date)->days + 1)."<br> \r\n ";
+							echo "num_vacation_perday = $num_vacation_perday on ".$requested_date->format('Y-m-d')."<br>\r\n ";
+							echo "num_nopaid_days = $num_nopaid_days \r\n";
+							echo "balance2 = $balance2 <br><br> \r\n  \r\n ";
+							echo "--> \r\n";
+						}
+
+					}
+					$balance += $balance2;
+
+
+
+				}
+
+			}
+
+///*******************************************************************************************************
+		// e.g.  join_month_day: 02-11, beginning_balance_date: 2023-03-15
+		}else {  // join_month_day < beginning_balance_date
+
+			if ($bShowDebug) echo "<!-- *** case 2: join_month_day < beginning_balance_date, {$join_date->format('m-d')} < [{$beginning_balance_date->format('Y-m-d')}]  -->\r\n";
+			// e.g. 2026-03-01
+			if ($requested_date->format('Y') > $beginning_balance_year ){
+
+				if ($bShowDebug) echo "<!-- case 2a: requested year >  beginning_balance year, {$requested_date->format('Y')} > [{$beginning_balance_year}] --> \r\n";
+			/////$requested_date must be > $beginning_balance_date
+			// e.g. requested date: 2023-04-05, or 2024-05-01, or 2025-05-01
+			// calculate the # of vacation per day after the balance date  until end of the year
+				$balance1 = getAnnualLeaveEntitlementFromCustomPackage($beginning_balance_date->format('Y-m-d'), $beginning_balance_year.'-12-31', $userRecord, $bShowDebug);
+				if ($balance1 ==0){
+					$num_vacation_perday = getNumberOfAnnualLeavePerDay($beginning_balance_year . '-12-31', $userRecord['id'], $bShowDebug);
+
+					$num_nopaid_days = getTotalUnpaidDays($userRecord['id'], $beginning_balance_date->format('Y-m-d'), $beginning_balance_year->format('Y-m-d') );
+
+					$tmp1 = new DateTime($beginning_balance_year.'-12-31');
+					$balance1 = $num_vacation_perday * (($beginning_balance_date->diff($tmp1)->days + 1) - $num_nopaid_days);
+
+					if ($bShowDebug) {
+						echo "<!--";
+						echo "different days from {$beginning_balance_date->format('Y-m-d')} : ". ( $beginning_balance_date->diff($tmp1)->days + 1)."<br>\r\n \r\n ";
+						echo "num_vacation_perday = $num_vacation_perday on ".$beginning_balance_year . '-12-31'."<br> \r\n \r\n ";
+						echo "num_nopaid_days = $num_nopaid_days \r\n";
+						echo "balance1 = $balance1 <br><br> --> \r\n  \r\n ";
+					}
+
+				}
+				$balance += $balance1;
+
+				$balance9 = calculateVacationLeaveEntitlement_with_request_date_bigger_BalanceYear($requested_date , $userRecord, $bShowDebug);
+				if ($bShowDebug) echo "<!-- balance9 = $balance9 <br><br> \r\n \r\n  -->";
+				$balance += $balance9;
+
+			}else {  // if ($requested_date->format('Y') == $beginning_balance_year ){
+				if ($bShowDebug) echo "<!-- case 2b: requested year = beginning_balance year, {$requested_date->format('Y')} = [{$beginning_balance_year}]  --> \r\n";
+
+				// calculate the # of vacation after the join month/day until the requested date if same year
+				$balance2 = getAnnualLeaveEntitlementFromCustomPackage($beginning_balance_date->format('Y-m-d'), $requested_date->format('Y-m-d'), $userRecord, $bShowDebug);
+				if ($balance2 ==0){
+					$num_vacation_perday = getNumberOfAnnualLeavePerDay($requested_date->format('Y-m-d'), $userRecord['id'], $bShowDebug);
+
+					$num_nopaid_days = getTotalUnpaidDays($userRecord['id'], $beginning_balance_date->format('Y-m-d'), $requested_date->format('Y-m-d'));
+
+					$balance2 = $num_vacation_perday * (($beginning_balance_date->diff($requested_date)->days + 1) - $num_nopaid_days);
+
+					if ($bShowDebug) {
+						echo "<!--";
+						echo "different days from {$requested_date->format('Y-m-d')} : ". ( $beginning_balance_date->diff($requested_date)->days + 1)."<br>\r\n";
+						echo "num_vacation_perday = $num_vacation_perday on ".$requested_date->format('Y-m-d')."<br>\r\n";
+						echo "num_nopaid_days = $num_nopaid_days \r\n";
+						echo "balance2 = $balance2 <br><br>
+							--> \r\n \r\n";
+					}
+				}
+				$balance += $balance2;
+
+
+
+
+			}
+		}
+
+
+		$total_leave= getTotalNumberOfLeave($userRecord['id'],'ANNUAL', $tmp['balance_date'], $end_date_of_annual_leave_taken, $sStatus_sql);  // defined in php-lib/site_functions.php
+	}else {
+
+		$balance += calculateTotalLeaveEntitlement_without_startbalance($requested_date->format('Y-m-d'), $userRecord, $bEntitlementCanUse, $bShowDebug);
+
+		$total_leave= getTotalNumberOfLeave($userRecord['id'],'ANNUAL',  $userRecord['joindate'], $end_date_of_annual_leave_taken, $sStatus_sql);     // defined in php-lib/site_functions.php
+	}
+
+
+	if ($bShowDebug) {
+		echo "<!--";
+		echo "Total available balance = $balance<br>\r\n";
+		echo "total leave = $total_leave<br> \r\n";
+		echo "-->";
+	}
+
+
+	return round($balance-$total_leave, 2);
+}
+
+/*
+
+///********************************************************************************************
+// input format of specific date : YYYY-m-d
+function calculateAnnualLeaveBalance(string $requested_date=null, string $user_id=null, bool $bShowDebug=true){
+
+	if ($user_id == null){
+		$userRecord = $_SESSION['login_account'];
+	}else {
+		$userRecord = getUserRecord($user_id);
+		if ($userRecord =='')
+			return 0;
+	}
+
+	$pick_date = $requested_date == null ? '' : $requested_date;
+	$balance = calculateTotalLeaveEntitlement($requested_date, $userRecord['id'], $bShowDebug);
+	$total_leave = getTotalLeaveTaken($userRecord['id'], 'ANNUAL', $pick_date);   // defined in php-lib/site_functions.php
+
+	if ($bShowDebug) { echo "<!-- Total annual leave taken = $total_leave --> \r\n "; }
+
+	return $balance - $total_leave;
+
+}
+
+
+*/
+/*
+	requested date: 2023-06-01 or 2024-02-01 or 2025-03-01
+	balance date: 2023-03-01
+	*/
+function calculateVacationLeaveEntitlement_with_request_date_bigger_BalanceYear($requested_date, $userRecord, bool $bShowDebug=true ){
+
+	$balance = 0;
+
+	if ($bShowDebug) echo "<!-- *** requested date year > beginning balance year  -->  \r\n ";
+
+	$tmp = getBalanceForwardFromDB('ANNUAL', $userRecord['id']);
+	if (count($tmp)>0){
+
+		$beginning_balance_date = new DateTime($tmp['balance_date']);
+		$beginning_balance_date->modify("+1 day");
+		$beginning_balance_year = $beginning_balance_date->format('Y');
+
+		$join_date = new DateTime($userRecord['joindate']);
+	//$beginnging_balance_month_day = substr($tmp['balance_date'], 5);
+		$join_month_day = new DateTime($beginning_balance_year .'-'. $join_date->format('m-d'));
+
+		$oneday_before_join_month_day = clone $join_month_day;
+		$oneday_before_join_month_day->modify("-1 day");
+
+
+		// e.g. 2026-03-01
+		if ($requested_date->format('Y') > $beginning_balance_year ){
+
+			if ($bShowDebug) echo "<!-- *** case 3: requested date year > beginning balance year , {$requested_date->format('Y')} = [{$beginning_balance_year}] -->  \r\n ";
+			//echo '2nd (i)case: requested date year > beginning balance year <br>';
+
+
+			// calculate the # of vacation for whole year
+			for($n = $requested_date->format('Y')-1; $n> $beginning_balance_year; $n--){
+				if ($bShowDebug) echo "<!-- *** case 3a: calculate the number of vacation on YEAR ".$n."--> \r\n";
+			//	echo '2nd (ii)case: calculate the number of vacation on YEAR '.$n.'  <br>';
+				$balance2 = getAnnualLeaveEntitlementFromCustomPackage($n.'-01-01', $n.$oneday_before_join_month_day->format('-m-d'), $userRecord, $bShowDebug);
+				if ($balance2 ==0){
+					$num_vacation_perday = getNumberOfAnnualLeavePerDay($n.$oneday_before_join_month_day->format('-m-d'), $userRecord['id'], $bShowDebug);
+
+					$num_nopaid_days = getTotalUnpaidDays($userRecord['id'], $n.'-01-01', $n.$oneday_before_join_month_day->format('Y-m-d'));
+
+					$tmp1 = new DateTime($n.'-01-01');
+					$tmp2 = new DateTime($n.$oneday_before_join_month_day->format('-m-d'));
+
+					$balance2 = $num_vacation_perday * (($tmp1->diff($tmp2)->days + 1) - $num_nopaid_days);
+					if ($bShowDebug) {
+						echo '<!--';
+						echo "different days from {$tmp1->format('Y-m-d')} : ".($tmp1->diff($tmp2)->days + 1)."<br> \r\n";
+						echo "num_vacation_perday = $num_vacation_perday on ". $tmp2->format('Y-m-d')."<br> \r\n";
+						echo "num_nopaid_days = $num_nopaid_days \r\n";
+						echo "balance2 = $balance2 <br><br> \r\n\r\n";
+					}
+				}
+				$balance += $balance2;
+
+
+				$balance3 = getAnnualLeaveEntitlementFromCustomPackage($n.'-'. $join_date->format('m-d'), $n.'-12-31', $userRecord, $bShowDebug);
+				if ($balance3 ==0){
+					$num_vacation_perday = getNumberOfAnnualLeavePerDay($n.'-12-31', $userRecord['id'], $bShowDebug);
+
+					$num_nopaid_days = getTotalUnpaidDays($userRecord['id'], $n.'-'. $join_date->format('Y-m-d'), $n.'-12-31' );
+
+					$tmp1 = new DateTime($n.'-'. $join_date->format('m-d'));
+					$tmp2 = new DateTime($n.'-12-31');
+					$balance3 = $num_vacation_perday * (($tmp1->diff($tmp2)->days + 1) -$num_nopaid_days);
+
+					if ($bShowDebug) {
+						echo "<!-- different days from {$tmp1->format('Y-m-d')} : ".($tmp1->diff($tmp2)->days + 1)."<br>\r\n";
+						echo "num_vacation_perday = $num_vacation_perday on ". $tmp2->format('Y-12-31')."<br>\r\n";
+						echo "num_nopaid_days = $num_nopaid_days \r\n";
+						echo "balance3 = $balance3 <br><br> ";
+						echo "--> \r\n\r\n" ;
+					}
+				}
+				$balance += $balance3;
+
+			}
+
+			// calculate the leave balance of the last year of the requested date
+			$year_of_requested_date = $requested_date->format('Y');
+
+
+			if ($bShowDebug) echo "<!-- *** case 4: calculate the last year of the requested date --> \r\n";
+			//echo '2nd (iii)case: calculate the last year of the requested date  <br>';
+
+			$tmp2 = new DateTime($year_of_requested_date.$oneday_before_join_month_day->format('-m-d'));
+			if ($requested_date <= $tmp2){
+				$balance4 = getAnnualLeaveEntitlementFromCustomPackage($year_of_requested_date.'-01-01', $year_of_requested_date.$oneday_before_join_month_day->format('-m-d'), $userRecord, $bShowDebug);
+				if ($balance4 ==0){
+					$num_vacation_perday = getNumberOfAnnualLeavePerDay($year_of_requested_date.$oneday_before_join_month_day->format('-m-d'), $userRecord['id'], $bShowDebug);
+
+					$num_nopaid_days = getTotalUnpaidDays($userRecord['id'], $year_of_requested_date.'-01-01', $year_of_requested_date.$oneday_before_join_month_day->format('Y-m-d') );
+
+					$tmp1 = new DateTime($year_of_requested_date.'-01-01');
+					//$tmp2 = new DateTime($year_of_requested_date.$join_month_day->format('-m-d'));
+					$balance4 = $num_vacation_perday * (($requested_date->diff($tmp1)->days + 1) - $num_nopaid_days);
+
+					if ($bShowDebug) {
+						echo "<!-- *** case 4a: requested date <= joined month day , {$requested_date->format('m-d')} < [{$tmp2->format('m-d')}]  --> \r\n";
+			//	echo '2nd (iv)case: requested date < joined month day <br>';
+						echo '<!--';
+						echo "different days from {$tmp1->format('Y-m-d')} to {$requested_date->format('Y-m-d')} : ".( $requested_date->diff($tmp1)->days + 1)."<br>\r\n";
+						echo "num_vacation_perday = $num_vacation_perday on ". ($year_of_requested_date.$oneday_before_join_month_day->format('-m-d') )."<br>\r\n";
+						echo "num_nopaid_days = $num_nopaid_days \r\n";
+						echo "balance4 = $balance4 <br><br> \r\n \r\n";
+						echo '-->';
+					}
+
+				}
+				$balance += $balance4;
+
+			}else{  // requested_date >= join_month_day
+				$balance5 = getAnnualLeaveEntitlementFromCustomPackage($year_of_requested_date.'-01-01', $year_of_requested_date.$oneday_before_join_month_day->format('-m-d'), $userRecord, $bShowDebug);
+				if ($balance5 ==0){
+					$num_vacation_perday = getNumberOfAnnualLeavePerDay($year_of_requested_date.$oneday_before_join_month_day->format('-m-d'), $userRecord['id'], $bShowDebug);
+
+					$num_nopaid_days = getTotalUnpaidDays($userRecord['id'], $year_of_requested_date.'-01-01', $year_of_requested_date.$oneday_before_join_month_day->format('Y-m-d') );
+
+
+					$tmp1 = new DateTime($year_of_requested_date.'-01-01');
+					$tmp2 = new DateTime($year_of_requested_date.$oneday_before_join_month_day->format('-m-d'));
+					$balance5 = $num_vacation_perday * (($tmp1->diff($tmp2)->days + 1) - $num_nopaid_days);
+
+					if ($bShowDebug){
+						echo "<!-- *** case 4b: requested date >= joined month day, {$requested_date->format('m-d')} >= [{$oneday_before_join_month_day->format('m-d')}] --> \r\n ";
+				//echo '2nd (v)case: requested date >= joined month day <br>';
+
+						echo '<!--';
+						echo "num_vacation_perday = $num_vacation_perday on ". $tmp2->format('Y-m-d')."<br>\r\n";
+						echo "different days from {$tmp1->format('Y-m-d')} to {$tmp2->format('Y-m-d')}: ". ( $tmp1->diff($tmp2)->days + 1). "<br> \r\n";
+						echo "num_nopaid_days = $num_nopaid_days \r\n";
+						echo "balance5 = $balance5 <br><br> ";
+						echo "--> \r\n \r\n";
+					}
+				}
+				$balance += $balance5;
+
+
+				$balance6 = getAnnualLeaveEntitlementFromCustomPackage($requested_date->format('Y-m-d'), $year_of_requested_date.'-'. $join_date->format('m-d'), $userRecord, $bShowDebug);
+				if ($balance6 ==0){
+					$num_vacation_perday = getNumberOfAnnualLeavePerDay($requested_date->format('Y-m-d'), $userRecord['id'], $bShowDebug);
+
+					$num_nopaid_days = getTotalUnpaidDays($userRecord['id'], $requested_date->format('Y-m-d'), $year_of_requested_date.'-'. $join_date->format('Y-m-d') );
+
+
+					$tmp1 = new DateTime($year_of_requested_date.'-'. $join_date->format('m-d'));
+					$balance6 = $num_vacation_perday * (($tmp1->diff($requested_date)->days + 1) - $num_nopaid_days) ;
+
+					if ($bShowDebug) {
+						echo "<!-- different days from {$tmp1->format('Y-m-d')} to {$requested_date->format('Y-m-d')} : ".( $tmp1->diff($requested_date)->days + 1)."<br> \r\n";
+						echo "num_vacation_perday = $num_vacation_perday on ". $requested_date->format('Y-m-d')."<br> \r\n";
+						echo "num_nopaid_days = $num_nopaid_days \r\n";
+						echo "balance6 = $balance6 <br><br> ";
+						echo "--> \r\n\r\n";
+					}
+
+				}
+				$balance += $balance6;
+
+			}
+
+
+		}
+
+	}
+
+	return $balance;
+}
+
+
+
+
+///*************************************************************************************
+//
+// If you have 3 consecutive months of continuous employment with the same employer, the first 3 days of leave are paid.
+// input format of requested date : YYYY-m-d
+// $bPaidLeave is true => only calculate the number of paid_leave days,
+// $bPaidLeave is false => only calculate the number of non_paid_leave days
+function getPersonalLeaveEntitlement(string $requested_date=null, string $user_id=null, bool $bPaidLeave=true,  bool $bShowDebug=true, string $type='FEDERAL' ){
+
+	global $PERSONAL_LEAVE_ANNUAL_ENTITLEMENT;
+
+	$type = strtoupper($type);
+	$type = in_array($type, array('BC', 'FEDERAL')) ? $type : 'FEDERAL';
+
+	if ($user_id == null){
+		$userRecord = $_SESSION['login_account'];
+	}else {
+		$userRecord = getUserRecord($user_id);
+		if ($userRecord =='')
+			return 0;
+	}
+
+	$user_id = $userRecord['id'];
+	$balance = 0;
+
+	if ($bShowDebug) { echo "<!-- Start Personal leave calculation   -->\r\n"; }
+
+	//print_r($_SESSION['login_account']);
+	$join_date = new DateTime($userRecord['joindate']);
+	$effective_date = clone $join_date;
+
+
+	switch ($type){
+		case "BC":
+			return 0;
+			exit;
+			break;
+
+		case "FEDERAL":
+			$effective_date->modify("+3 months");  // after 3 months probation
+			//echo 'join date: '.$join_date->format('Y-n-d') .'<br>';
+			if ($bShowDebug) { echo '<!-- effective date ( 3 months after join date) : '.$effective_date->format('Y-m-d') ." --> \r\n"; }
+			break;
+	}
+
+	if ($requested_date == null){
+		$pick_date = new DateTime();
+		$year = date('Y');
+		$current_month = date('n');
+	}else {
+		$pick_date = new DateTime($requested_date);
+		$year = $pick_date->format('Y');
+		$current_month = $pick_date->format('n');
+	}
+
+	$interval = $effective_date->diff($pick_date);
+
+	// Is 1 if the interval represents a negative time period and 0 otherwise
+	$total_days_worked = ($interval->days+1) * ( $interval->invert ? -1 : 1);   // nb: ->days always positive
+
+	if ($bShowDebug) { echo "<!-- From ".$effective_date->format('Y-m-d'). " to ".$pick_date->format('Y-m-d') ."-->\r\n"; }
+	if ($bShowDebug) { echo "<!-- The different days between the requested date and the effective date is : $total_days_worked --> \r\n"; }
+
+	// After completing your initial 3 months qualifying period, you will earn the personal leave
+	if ($total_days_worked <0){
+		return 0;
+		exit;
+	}
+	switch ($type){
+		/*case "BC":
+			return $BEREAVEMENT_LEAVE_ANNUAL_ENTITLEMENT[$type]['UNPAID'] ;
+			break;*/
+
+		case "FEDERAL":
+
+			if ($bPaidLeave == PAID_LEAVE){
+				return $PERSONAL_LEAVE_ANNUAL_ENTITLEMENT[$type]['PAID'] ;
+			}else 	return $PERSONAL_LEAVE_ANNUAL_ENTITLEMENT[$type]['UNPAID'] ;
+
+			break;
+
+	}
+
+
+
+
+	/*switch ($type){
+		case "BC":
+			break;
+
+		case "FEDERAL":
+
+			if ($bPaidLeave == PAID_LEAVE){
+				return PAID_PERSONAL_LEAVE_ANNUAL_ENTITLEMENT ;
+			}else 	return UNPAID_PERSONAL_LEAVE_ANNUAL_ENTITLEMENT;
+
+			break;
+	}*/
+
+
+}
+
+
+
+///********************************************************************************************
+// input format of specific date : YYYY-m-d
+// $bPaidLeave is true => only calculate the number of paid_leave days,
+// $bPaidLeave is false => only calculate the number of non_paid_leave days
+function calculatePersonalLeaveBalance(string $requested_date=null, string $user_id=null, bool $bPaidLeave=true,  bool $bShowDebug=true, bool $bForApplyLeave=false ){
+
+	if ($user_id == null){
+		$userRecord = $_SESSION['login_account'];
+	}else {
+		$userRecord = getUserRecord($user_id);
+		if ($userRecord =='')
+			return 0;
+	}
+
+	if ($bPaidLeave == PAID_LEAVE) // defined in config.php
+		$sql_inner = " and is_paid_leave='Y' ";
+	else $sql_inner = " and is_paid_leave='N' ";
+
+	if ($bForApplyLeave == FOR_APPLY_LEAVE_ONLY)  // defined in config.php
+		$sql_inner2 = " and status != 'Cancelled' ";
+	else $sql_inner2 = " and status='Confirmed' ";
+
+	$balance = getPersonalLeaveEntitlement($requested_date, $userRecord['id'],$bPaidLeave, $bShowDebug);
+
+	if ($requested_date == null ){
+		$pick_year = date('Y');
+	}else { $pick_year = substr( $requested_date, 0, 4); }
+
+	//// get how many personal leave took on the requested year
+	$hdb = getConnection(); // defined in php-lib/DatabaseClass.php
+	$sql = "select COALESCE(SUM(number_of_day), 0) as total_day  from leave_detail
+			where user_id=:id and type_of_leave='PERSONAL_LEAVE' $sql_inner $sql_inner2 and leave_date like '$pick_year-%'";
+	$params = array('id'=>$user_id);
+	$aResult = $hdb->query($sql, $params);
+
+	if ($bShowDebug) {  echo "<!-- how many personal leave took on the requested year --> \r\n"; }
+
+	if ($bShowDebug) {  echo "<!-- ".$hdb->odo_sql_debug($sql, $params) ."--> \r\n"; }
+
+	$total_leave = count($aResult) >0 ? $aResult[0]['total_day'] : 0;
+
+	if ($bShowDebug) { echo "<!-- Total ". ($bPaidLeave ? " paid " : 'unpaid') . "  personal leave entitlement = $balance --> \r\n "; }
+	if ($bShowDebug) { echo "<!-- Total ". ($bPaidLeave ? " paid " : 'unpaid') . "  personal leave taken = $total_leave --> \r\n "; }
+
+	$totalBalance = $balance - $total_leave;
+	$totalBalance = $totalBalance <=0 ? 0 : $totalBalance;
+
+	if ($bShowDebug) { echo "<!-- Total ". ($bPaidLeave ? " paid " : 'unpaid') . "  personal leave = $totalBalance --> \r\n "; }
+
+	return $totalBalance;
+}
+
+
+///********************************************************************************************
+// input format of specific date : YYYY-m-d
+// $bPaidLeave is true => only calculate the number of paid_leave days,
+// $bPaidLeave is false => only calculate the number of non_paid_leave days
+// $sStatus_sql
+/*function calculatePersonalLeaveBalance_with_StatusSQL(string $requested_date=null, string $user_id=null, bool $bPaidLeave=true, string $sStatus_sql=''){
+
+	$bShowDebug = true;
+
+	if ($user_id == null){
+		$userRecord = $_SESSION['login_account'];
+	}else {
+		$userRecord = getUserRecord($user_id);
+		if ($userRecord =='')
+			return 0;
+	}
+
+	if ($bPaidLeave == PAID_LEAVE) // defined in config.php
+		$sql_inner = " and is_paid_leave='Y' ";
+	else $sql_inner = " and is_paid_leave='N' ";
+
+	$sStatus_sql = $sStatus_sql ? " and (".$sStatus_sql.") "  : '';
+
+	$balance = getPersonalLeaveEntitlement($requested_date, $userRecord['id'],$bPaidLeave, $bShowDebug);
+
+	if ($requested_date == null ){
+		$pick_year = date('Y');
+	}else { $pick_year = substr( $requested_date, 0, 4); }
+
+	//// get how many personal leave took on the requested year
+	$hdb = getConnection(); // defined in php-lib/DatabaseClass.php
+	$sql = "select COALESCE(SUM(number_of_day), 0) as total_day from leave_detail
+			where user_id=:id and type_of_leave='PERSONAL_LEAVE' $sql_inner $sStatus_sql and leave_date like '$pick_year-%'";
+	$params = array('id'=>$user_id);
+	$aResult = $hdb->query($sql, $params);
+
+	if ($bShowDebug) {  echo "<!-- in function calculatePersonalLeaveBalance_with_StatusSQL() --> \r\n"; }
+	if ($bShowDebug) {  echo "<!-- how many personal leave took on the requested year --> \r\n"; }
+
+	if ($bShowDebug) {  echo "<!-- ".$hdb->odo_sql_debug($sql, $params) ."--> \r\n"; }
+
+	$total_leave = count($aResult) >0 ? $aResult[0]['total_day'] : 0;
+
+	if ($bShowDebug) { echo "<!-- Total ". ($bPaidLeave ? " paid " : 'unpaid') . "  personal leave entitlement = $balance --> \r\n "; }
+	if ($bShowDebug) { echo "<!-- Total ". ($bPaidLeave ? " paid " : 'unpaid') . "  personal leave taken = $total_leave --> \r\n "; }
+
+	$totalBalance = $balance - $total_leave;
+	$totalBalance = $totalBalance <=0 ? 0 : $totalBalance;
+
+	if ($bShowDebug) { echo "<!-- Total ". ($bPaidLeave ? " paid " : 'unpaid') . "  personal leave = $totalBalance --> \r\n "; }
+
+	return $totalBalance;
+}
+*/
+
+
+///*************************************************************************************
+// if the staff works less than one year, no start balance will be zero.
+// leave balance is calculated only if the year of $specific_date is the same year of the leave_balance in db
+// input format of specific date : YYYY-m-d
+// $bPaidLeave is true => only calculate the number of paid_leave days,
+// $bPaidLeave is false => only calculate the number of non_paid_leave days
+
+// $type must be either BC or FEDERAL
+function getMedicalLeaveEntitlement(string $specific_date=null, string $user_id=null,  bool $bPaidLeave=true,  bool $bShowDebug=true , string $type='FEDERAL' , string $end_date_of_medical_leave_taken='' ){
+
+	global $SICK_LEAVE_ENTITLEMENT;
+
+	$type = strtoupper($type);
+	$type = in_array($type, array('BC', 'FEDERAL')) ? $type : 'FEDERAL';
+
+	if ($user_id == null){
+		$userRecord = $_SESSION['login_account'];
+	}else {
+		$userRecord = getUserRecord($user_id);
+		if ($userRecord =='')
+			return 0;
+	}
+
+	$user_id = $userRecord['id'];
+	$balance = 0;
+
+	if ($bShowDebug) { echo "<!-- Start medical leave calculation   -->\r\n"; }
+
+	//print_r($_SESSION['login_account']);
+	$join_date = new DateTime($userRecord['joindate']);
+	//echo 'join date: '.$join_date->format('Y-n-d') .'<br>';
+
+	switch ($type){
+		case "BC":
+
+			// After 90 days of employment, you will earn the sick leave
+			$effective_date = clone $join_date;
+			$effective_date->modify("+90 days");  // after 90 days employment
+			//echo 'join date: '.$join_date->format('Y-n-d') .'<br>';
+			if ($bShowDebug) { echo '<!-- effective date ( 90 days after join date) : '.$effective_date->format('Y-m-d') ." --> \r\n"; }
+			break;
+
+		case "FEDERAL":
+
+			// After completing your initial 30-day qualifying period, you will earn your first 3 days of medical leave with pay.
+			$effective_date = clone $join_date;
+			$effective_date->modify("+30 days");  // after 30 days employment
+			if ($bShowDebug) { echo '<!-- effective date ( 30 days after join date) : '.$effective_date->format('Y-m-d') ." --> \r\n"; }
+			break;
+	}
+
+	if ($specific_date == null){
+		$requested_date = new DateTime();
+		$requested_year = date('Y');
+		$requested_month = date('n');
+	}else {
+		$requested_date = new DateTime($specific_date);
+		$requested_year = $requested_date->format('Y');
+		$requested_month = $requested_date->format('n');
+	}
+
+
+	$interval = $effective_date->diff($requested_date);
+
+	//echo 'total_days_worked: '.$interval->format('%R%a') .'<br>';
+	// Is 1 if the interval represents a negative time period and 0 otherwise
+	$total_days_worked = ($interval->days+1) * ( $interval->invert ? -1 : 1);   // nb: ->days always positive
+
+	if ($bShowDebug) { echo "<!-- From ".$effective_date->format('Y-m-d'). " to ".$requested_date->format('Y-m-d') ."-->\r\n"; }
+	if ($bShowDebug) { echo "<!-- The different days between the requested date and the effective date is : $total_days_worked --> \r\n"; }
+//	if ($bShowDebug) { echo "<!-- total_days_worked: ".$total_days_worked ."-->\r\n"; }
+
+
+	//if ($total_days_worked <30){
+	if ($total_days_worked < 0){
+		return 0;
+		exit;
+	}
+
+	switch ($type){
+		case "BC":
+
+			if ($bPaidLeave == PAID_LEAVE){
+				return $SICK_LEAVE_ENTITLEMENT[$type]['PAID'];
+			}else 	return $SICK_LEAVE_ENTITLEMENT[$type]['UNPAID'];
+
+			break;
+
+		case "FEDERAL":
+		{
+
+			$year_of_employment = $interval->y;
+
+			if ($bShowDebug) { echo "<!-- year_of_employment: ".$year_of_employment ."-->\r\n"; }
+
+			$tmp = getBalanceForwardFromDB('SICK_LEAVE', $user_id, $bShowDebug);
+			//print_r($tmp);
+					
+			$number_balance_added = 0;
+
+			// the user has starting balance forward record
+			if (count($tmp)>0){		
+			//	$beginning_balance = $tmp['balance'];
+				$bf_date = new DateTime($tmp['balance_date']);
+				$bf_date->modify("+1 day");
+				$bf_month = $bf_date->format('n');
+				$bf_year = $bf_date->format('Y');
+
+				if ($bShowDebug) { echo "<!-- number of balance on ".$tmp['balance_date'].": ".$tmp['balance']." --> \r\n"; }
+				
+				if ($bf_year == $requested_year){
+					
+					$balance = $tmp['balance'];
+
+					for($m=$requested_month; $m > $bf_month; $m--){
+						$balance = $balance < $SICK_LEAVE_ENTITLEMENT[$type]['PAID'] ? $balance +1 : $balance;
+						if ($bShowDebug) { echo "<!-- Balance  = $balance --> \r\n "; }
+					}
+			
+					//$balance = MedicalLeaveCalculationInnerFunction($balance, $requested_date, $start_month=2, $userRecord['id'], $bShowDebug , $end_date_of_medical_leave_taken);
+
+					// starting at the beginning of January, the user can receive 1 day of medical leave with pay
+					/*for($m=$bf_month; $m <= $requested_month; $m++){
+
+						$leave_taken = 0;
+						if ($m >= 2){
+						// starting beginning of feburary, find out how many leave the user took on last month
+
+							$start_date = new DateTime($requested_year .'-'.$m .'-01');
+							$start_date->modify("-1 month");
+							$start = $start_date->format('Y-m').'-01';
+
+							if ($m < $requested_month){
+								$end_date = clone $start_date;
+								$end_date->modify("+1 months");
+								$end = $end_date->format('Y-m-d');
+							}elseif ($m == $requested_month){
+								$end = $requested_date->format('Y-m-d');
+							}
+
+							$sql_inner2 = " and status='Confirmed' ";
+							$sql = "select SUM(number_of_day) as total_day from leave_detail where user_id=:id and type_of_leave='SICK_LEAVE' and leave_date >= '$start' and leave_date <= '$end'  $sql_inner2 ";
+							$params = array('id' => $userRecord['id']  );
+							$aResult = $hdb->query($sql,$params);
+							$leave_taken = count($aResult) >0 ? $aResult[0]['total_day'] : 0;
+						}
+
+
+						if ($balance < $SICK_LEAVE_ENTITLEMENT[$type]['PAID'] &&
+							$number_balance_added < $SICK_LEAVE_ENTITLEMENT[$type]['PAID']){
+							$balance = $balance +1;
+							$number_balance_added++;
+						}
+
+						if ($bShowDebug) { echo "<!-- Balance  = $balance on $m --> \r\n "; }
+						if ($bShowDebug) { echo "<!-- Total leave taken = $leave_taken on $m --> \r\n ";}
+						$balance = $balance - $leave_taken;
+						if ($bShowDebug) { echo "<!-- Total balance = $balance on $m --> \r\n ";}
+
+					}*/
+					
+					// if not the same year of balance date 
+				}
+
+			// no starting balance forward record and
+			// user worked more than 30 days but less than 1 year
+			}elseif  ($year_of_employment <=0  ){
+
+				$balance = 3;
+
+				// calculate rest of the year balance
+				if ($join_date->format('n') <= $SICK_LEAVE_ENTITLEMENT[$type]['PAID']  && $join_date->format('Y') == $year  ) {
+
+					$month_later = clone $join_date;
+					$month_later->modify('+1 month');
+					$the_month_after_month_later = $month_later->format('n');
+
+					if ($bShowDebug) { echo "<!-- The_month_after affective date = $the_month_after_month_later --> \r\n "; }
+					
+						for($m=$requested_month; $m> $the_month_after_month_later; $m--){
+							$balance = $balance < $SICK_LEAVE_ENTITLEMENT[$type]['PAID'] ? $balance +1 : $balance;
+						}
+				}else{
+
+					for($m=$requested_month; $m >= 2; $m--){
+						$balance = $balance < $SICK_LEAVE_ENTITLEMENT[$type]['PAID'] ? $balance +1 : $balance;
+					}
+				}
+
+
+				//	$balance = MedicalLeaveCalculationInnerFunction($balance, $requested_date, $the_month_after_month_later, $userRecord['id'] , $bShowDebug,  $end_date_of_medical_leave_taken);
+				/*	for($m=$the_month_after_month_later; $m <= $requested_month; $m++){
+
+						$leave_taken = 0;
+						if ($m >= 2){
+						// starting beginning of feburary, find out how many leave the user took on last month
+
+							$start_date = new DateTime($requested_year .'-'.$m .'-01');
+							$start_date->modify("-1 month");
+							$start = $start_date->format('Y-m').'-01';
+
+							if ($m < $requested_month){
+								$end_date = clone $start_date;
+								$end_date->modify("+1 months");
+								$end = $end_date->format('Y-m-d');
+							}elseif ($m == $requested_month){
+								$end = $requested_date->format('Y-m-d');
+							}
+
+							$sql_inner2 = " and status='Confirmed' ";
+							$sql = "select SUM(number_of_day) as total_day from leave_detail where user_id=:id and type_of_leave='SICK_LEAVE' and leave_date >= '$start' and leave_date <= '$end'  $sql_inner2 ";
+							$params = array('id' => $userRecord['id']  );
+							$aResult = $hdb->query($sql,$params);
+							$leave_taken = count($aResult) > 0 ? $aResult[0]['total_day'] : 0;
+						}
+
+						if ($balance < $SICK_LEAVE_ENTITLEMENT[$type]['PAID'] &&
+							$number_balance_added < $SICK_LEAVE_ENTITLEMENT[$type]['PAID']){
+							$balance = $balance +1;
+							$number_balance_added++;
+						}
+
+						if ($bShowDebug) { echo "<!-- Balance = $balance on $m --> \r\n "; }
+						if ($bShowDebug) { echo "<!-- Total leave taken = $leave_taken on $m --> \r\n "; }
+						$balance = $balance - $leave_taken;
+						if ($bShowDebug) { echo "<!-- Total balance = $balance on $m --> \r\n "; }
+
+					}*/
+			/*	}else{
+
+						// starting feburary, the user can earn 1 day of medical leave
+						for($m=2; $m <= $requested_month; $m++){
+							$balance = $balance < $SICK_LEAVE_ENTITLEMENT[$type]['PAID'] ? $balance +1 : $balance;
+							echo "<!-- Balance  = $balance on $m --> \r\n ";
+						}
+				}*/
+
+
+			// the user worked more than 1 year without balance forward record
+			}else {
+
+				if ($bShowDebug) { echo "<!-- no record from DB balance_forward --> \r\n"; }
+				for($m=$requested_month; $m >= 2; $m--){
+					$balance = $balance < $SICK_LEAVE_ENTITLEMENT[$type]['PAID']? $balance +1 : $balance;
+				}
+		
+				//$balance = 3;
+
+				//$balance = MedicalLeaveCalculationInnerFunction($balance, $requested_date, 2 , $userRecord['id'], $bShowDebug, $end_date_of_medical_leave_taken);
+
+				// starting feburary, the user can earn 1 day of medical leave
+				/*for($m=2; $m <= $requested_month; $m++){
+
+					$leave_taken = 0;
+					if ($m >= 2){
+
+						// starting beginning of feburary, find out how many leave the user took on last month
+
+							$start_date = new DateTime($requested_year .'-'.$m .'-01');
+							$start_date->modify("-1 month");
+							$start = $start_date->format('Y-m').'-01';
+
+							if ($m < $requested_month){
+								$end_date = clone $start_date;
+								$end_date->modify("+1 months");
+								$end = $end_date->format('Y-m-d');
+							}elseif ($m == $requested_month){
+								$end = $requested_date->format('Y-m-d');
+							}
+
+							$sql_inner2 = " and status='Confirmed' ";
+							$sql = "select SUM(number_of_day) as total_day from leave_detail where user_id=:id and type_of_leave='SICK_LEAVE' and leave_date >= '$start' and leave_date <= '$end'  $sql_inner2 ";
+							$params = array('id' => $userRecord['id']  );
+							$aResult = $hdb->query($sql,$params);
+							$leave_taken = count($aResult) >0 ? $aResult[0]['total_day'] : 0;
+						}
+
+						if ($balance < $SICK_LEAVE_ENTITLEMENT[$type]['PAID'] &&
+							$number_balance_added < $SICK_LEAVE_ENTITLEMENT[$type]['PAID']){
+							$balance = $balance +1;
+							$number_balance_added++;
+						}
+
+						if ($bShowDebug) { echo "<!-- Balance = $balance on $m --> \r\n "; }
+						if ($bShowDebug) { echo "<!-- Total leave taken = $leave_taken on $m --> \r\n "; }
+						$balance = $balance - $leave_taken;
+						if ($bShowDebug) { echo "<!-- Total balance = $balance on $m --> \r\n "; }
+
+					}
+					*/
+
+			}
+
+			}// end of case
+
+		} // end of switch
+
+		if ($bShowDebug) { echo "<!-- Total medical leave available = $balance --> \r\n "; }
+		return $balance;
+
+
+}
+
+///********************************************************************************************
+// input format of specific date : YYYY-m-d
+// $bPaidLeave is true => only calculate the number of paid_leave days,
+// $bPaidLeave is false => only calculate the number of non_paid_leave days
+// $type must be either BC or FEDERAL
+
+//function calculateMedicalLeaveBalance(string $requested_date=null, string $user_id=null,  bool $bShowDebug=true,  string $sStatus_sql='' ){
+function calculateMedicalLeaveBalance(string $requested_date=null, string $user_id=null,  bool $bPaidLeave=true,  bool $bShowDebug=true, bool $bForApplyLeave=false , string $type='FEDERAL', string  $end_date_of_medical_leave_taken='' ){
+
+	if ($user_id == null){
+		$userRecord = $_SESSION['login_account'];
+	}else {
+		$userRecord = getUserRecord($user_id);
+		if ($userRecord =='')
+			return 0;
+	}
+
+	$type = strtoupper($type);
+	$type = in_array($type, array('BC', 'FEDERAL')) ? $type : 'FEDERAL';
+
+	/*if ($bForApplyLeave == FOR_APPLY_LEAVE_ONLY)  // defined in config.php
+		$sql_inner2 = " and status != 'Cancelled' ";
+	else $sql_inner2 = " and status='Confirmed' ";
+		*/
+	$sql_inner2 = " and status='Confirmed' ";
+			
+	switch ($type){
+		case "FEDERAL":
+
+			$balance = getMedicalLeaveEntitlement($requested_date, $userRecord['id'], $bPaidLeave, $bShowDebug, $type, $end_date_of_medical_leave_taken);
+
+			if ($requested_date == null ){
+				$pick_year = date('Y');
+			}else { $pick_year = substr( $requested_date, 0, 4); }
+			
+			$hdb = getConnection();
+
+			//// get how many sick leave took on the requested year
+			$sql = "select SUM(number_of_day) as total_day from leave_detail where user_id=:id  and type_of_leave='SICK_LEAVE' and leave_date like '$pick_year-%'  $sql_inner2 ";
+			$params = array('id'=>  $userRecord['id']  );
+			$aResult = $hdb->query($sql,$params);
+
+			//$total_leave = getTotalNumberOfLeave($userRecord['id'], 'SICK_LEAVE', $requested_date, $end_date='', $sStatus_sql='');   // defined in php-lib/site_functions.php
+			$total_leave = count($aResult) >0 ? $aResult[0]['total_day'] : 0;
+
+			if ($bShowDebug) { echo "<!-- ".$hdb->odo_sql_debug($sql, $params) ."--> \r\n"; }
+			if ($bShowDebug) { echo "<!-- Total medical leave taken = $total_leave --> \r\n "; }
+
+			$totalBalance = $balance - $total_leave;
+		
+			//$totalBalance = $balance;
+
+			return $totalBalance;
+			break;
+
+		case "BC":
+		{
+
+			$balance = getMedicalLeaveEntitlement($requested_date, $userRecord['id'], $bPaidLeave, $bShowDebug, $type);
+
+			if ($bPaidLeave == PAID_LEAVE) // defined in config.php
+				$sql_inner = " and is_paid_leave='Y' ";
+			else $sql_inner = " and is_paid_leave='N' ";
+
+			if ($requested_date == null ){
+				$pick_year = date('Y');
+			}else { $pick_year = substr( $requested_date, 0, 4); }
+
+			//// get how many sick leave took on the requested year
+			$hdb = getConnection(); // defined in php-lib/DatabaseClass.php
+			$sql = "select COALESCE(SUM(number_of_day), 0) as total_day  from leave_detail
+					where user_id=:id and type_of_leave='SICK_LEAVE' $sql_inner $sql_inner2 and leave_date like '$pick_year-%'";
+			$params = array('id' => $userRecord['id'] );
+			$aResult = $hdb->query($sql, $params);
+
+			if ($bShowDebug) { echo "<!-- how many sick leave took on the requested year --> \r\n"; }
+
+			if ($bShowDebug) { echo "<!-- ".$hdb->odo_sql_debug($sql, $params) ."--> \r\n"; }
+
+			$total_leave = count($aResult) >0 ? $aResult[0]['total_day'] : 0;
+
+			if ($bShowDebug) { echo "<!-- Total ". ($bPaidLeave ? " paid " : 'unpaid') . "  sick leave entitlement = $balance --> \r\n "; }
+			if ($bShowDebug) { echo "<!-- Total ". ($bPaidLeave ? " paid " : 'unpaid') . "  sick leave taken = $total_leave --> \r\n "; }
+
+			$totalBalance = $balance - $total_leave;
+			$totalBalance = $totalBalance <=0 ? 0 : $totalBalance;
+
+			if ($bShowDebug) { echo "<!-- Total ". ($bPaidLeave ? " paid " : 'unpaid') . "  sick leave = $totalBalance --> \r\n "; }
+
+			return $totalBalance;
+
+			break;
+		}
+	} // end of switch
+
+}
+
+
+/* Parameter:
+	- start_balance is the original starting balance
+	- requested_date must be DateTime object
+*//*
+function MedicalLeaveCalculationInnerFunction($start_balance, $requested_date, $start_month , $user_id, bool $bShowDebug=true, string $end_date_of_medical_leave_taken='' ){
+
+	global $SICK_LEAVE_ENTITLEMENT;
+
+	$requested_year = $requested_date->format('Y');
+	$requested_month = $requested_date->format('n');
+
+	$balance = $start_balance;
+
+	$type = 'FEDERAL';
+
+	$hdb = getConnection();
+
+
+	// starting beginning of feburary, find out how many leave days the user took
+	{
+		$leave_taken = 0;
+		$start = $requested_year .'-01-01';
+
+		if ($end_date_of_medical_leave_taken){
+			$end_sql = " and leave_date <= '$end_date_of_medical_leave_taken'  ";
+		}else $end_sql = '';
+
+		$sql = "select SUM(number_of_day) as total_day from leave_detail where user_id=:id and type_of_leave='SICK_LEAVE' and leave_date >= '$start' $end_sql and status='Confirmed' ";
+		$params = array('id' => $user_id );
+		$aResult = $hdb->query($sql,$params);
+		$leave_taken = count($aResult) >0 && $aResult[0]['total_day'] != NULL? $aResult[0]['total_day'] : 0;
+		if ($bShowDebug) { echo "<!-- ".$hdb->odo_sql_debug($sql, $params) ."--> \r\n"; }
+
+		if ($bShowDebug) { echo "<!-- Balance = $balance --> \r\n "; }
+		if ($bShowDebug) { echo "<!-- Total leave taken = $leave_taken --> \r\n ";}
+
+		// must be deduct confirmed leave days first
+		$balance = $balance - $leave_taken;
+	}
+
+	$number_balance_added = 0;
+
+	// starting at the beginning of the $start_month, the user will receive 1 day of medical leave with pay
+	// $m is the month
+	for($m=$start_month; $m <= $requested_month; $m++){
+
+		if ($balance < $SICK_LEAVE_ENTITLEMENT[$type]['PAID'] ){ //&&
+			//$number_balance_added < $SICK_LEAVE_ENTITLEMENT[$type]['PAID']){
+			$balance = $balance +1;
+			$number_balance_added++;
+		}
+
+		$dateObj   = DateTime::createFromFormat('!m', $m);
+		$monthName = $dateObj->format('F'); // March
+
+		if ($bShowDebug) { echo "<!-- Total balance = $balance on $monthName --> \r\n ";}
+
+	}
+	return $balance;
+
+}
+*/
+
+///*************************************************************************************
+//
+// If you have 3 consecutive months of continuous employment with the same employer, the first 3 days of leave are paid.
+// input format of requested date : YYYY-m-d
+// $bPaidLeave is true => only calculate the number of paid_leave days,
+// $bPaidLeave is false => only calculate the number of non_paid_leave days
+function getBereavementLeaveEntitlement(string $requested_date=null, string $user_id=null,string $type ,bool $bPaidLeave=true,  bool $bShowDebug=true){
+
+	global $BEREAVEMENT_LEAVE_ANNUAL_ENTITLEMENT;
+
+	$type = strtoupper($type);
+	$type = in_array($type, array('BC', 'FEDERAL')) ? $type : 'FEDERAL';
+
+	if ($user_id == null){
+		$userRecord = $_SESSION['login_account'];
+	}else {
+		$userRecord = getUserRecord($user_id);
+		if ($userRecord =='')
+			return 0;
+	}
+
+	$user_id = $userRecord['id'];
+	$balance = 0;
+
+	if ($bShowDebug) { echo "<!-- Start bereavement leave calculation   -->\r\n"; }
+
+	//print_r($_SESSION['login_account']);
+	$join_date = new DateTime($userRecord['joindate']);
+	$effective_date = clone $join_date;
+
+	switch ($type){
+		case "BC":
+
+			$effective_date = clone $join_date;
+			//$effective_date->modify("+90 days");  // after 90 days employment
+			//echo 'join date: '.$join_date->format('Y-n-d') .'<br>';
+			if ($bShowDebug) { echo '<!-- effective date (after join date) : '.$effective_date->format('Y-m-d') ." --> \r\n"; }
+			break;
+
+		case "FEDERAL":
+
+			// After 90 days of employment, you will earn the leave
+			$effective_date->modify("+3 months");  // after 3 months probation
+			//echo 'join date: '.$join_date->format('Y-n-d') .'<br>';
+			if ($bShowDebug) { echo '<!-- effective date ( 3 months after join date) : '.$effective_date->format('Y-m-d') ." --> \r\n"; }
+			break;
+	}
+
+
+		if ($requested_date == null){
+				$pick_date = new DateTime();
+			//	$year = date('Y');
+				//$requested_month = date('n');
+			}else {
+				$pick_date = new DateTime($requested_date);
+		//		$year = $pick_date->format('Y');
+				//$requested_month = $pick_date->format('n');
+			}
+
+			$interval = $effective_date->diff($pick_date);
+
+			// Is 1 if the interval represents a negative time period and 0 otherwise
+			$total_days_worked = ($interval->days+1) * ( $interval->invert ? -1 : 1);   // nb: ->days always positive
+
+			if ($bShowDebug) { echo "<!-- From ".$effective_date->format('Y-m-d'). " to ".$pick_date->format('Y-m-d') ."-->\r\n"; }
+			if ($bShowDebug) { echo "<!-- The different days between the requested date and the effective date is : $total_days_worked --> \r\n"; }
+
+// After completing your initial 30-day qualifying period, you will earn your first 3 days of medical leave with pay.
+	if ($total_days_worked <0){
+		return 0;
+		exit;
+	}
+
+
+	switch ($type){
+
+		case "BC":
+			if ($bPaidLeave == PAID_LEAVE){
+				return $BEREAVEMENT_LEAVE_ANNUAL_ENTITLEMENT[$type]['PAID'] ;
+			}else 	return $BEREAVEMENT_LEAVE_ANNUAL_ENTITLEMENT[$type]['UNPAID'] ;
+			break;
+
+		case "FEDERAL":
+
+			if ($bPaidLeave == PAID_LEAVE){
+				return $BEREAVEMENT_LEAVE_ANNUAL_ENTITLEMENT[$type]['PAID'] ;
+			}else 	return $BEREAVEMENT_LEAVE_ANNUAL_ENTITLEMENT[$type]['UNPAID'] ;
+
+			break;
+
+	}
+
+}
+
+
+
+///********************************************************************************************
+// input format of specific date : YYYY-m-d
+// $bPaidLeave is true => only calculate the number of paid_leave days,
+// $bPaidLeave is false => only calculate the number of non_paid_leave days
+
+function calculateBereavementLeaveBalance(string $requested_date=null, string $user_id=null,string $type ,bool $bPaidLeave=true,  bool $bShowDebug=true , bool $bForApplyLeave=false){
+
+	if ($user_id == null){
+		$userRecord = $_SESSION['login_account'];
+	}else {
+		$userRecord = getUserRecord($user_id);
+		if ($userRecord =='')
+			return 0;
+	}
+
+	if ($bPaidLeave == PAID_LEAVE)  // defined in config.php
+ 		$sql_inner = " and is_paid_leave='Y' ";
+	else $sql_inner = " and is_paid_leave='N' ";
+
+	if ($bForApplyLeave == FOR_APPLY_LEAVE_ONLY)  // defined in  config.php
+		$sql_inner2 = " and status != 'Cancelled' ";
+	else $sql_inner2 = " and status='Confirmed' ";
+
+	$balance = getBereavementLeaveEntitlement($requested_date, $userRecord['id'],$type,$bPaidLeave, $bShowDebug);
+
+	if ($requested_date == null ){
+		$pick_year = date('Y');
+	}else { $pick_year = substr( $requested_date, 0, 4); }
+
+	$hdb = getConnection(); // defined in php-lib/DatabaseClass.php
+	$sql = "select COALESCE(SUM(number_of_day), 0) as total_day  from leave_detail
+	where user_id=:id and type_of_leave='BEREAVEMENT_LEAVE' $sql_inner $sql_inner2 and leave_date like '$pick_year-%'";
+	$params = array('id'=>$user_id);
+	$aResult = $hdb->query($sql, $params);
+	//echo $hdb->odo_sql_debug($sql, $params);
+
+	$total_leave = count($aResult) >0 ? $aResult[0]['total_day'] : 0;
+
+	if ($bShowDebug) { echo "<!-- Total ". ($bPaidLeave ? " paid " : 'unpaid') . "  bereavement leave entitlement = $balance --> \r\n "; }
+	if ($bShowDebug) { echo "<!-- Total ". ($bPaidLeave ? " paid " : 'unpaid') . "  bereavement leave taken = $total_leave --> \r\n "; }
+
+	$totalBalance = $balance - $total_leave;
+	$totalBalance = $totalBalance <=0 ? 0 : $totalBalance;
+
+	return $totalBalance;
+}
+
+
+///********************************************************************************************
+// input format of specific date : YYYY-m-d
+// $bPaidLeave is true => only calculate the number of paid_leave days,
+// $bPaidLeave is false => only calculate the number of non_paid_leave days
+/*
+function calculateBereavementLeaveBalance_with_StatusSQL(string $requested_date=null, string $user_id=null, bool $bPaidLeave=true,  string $sStatus_sql='' ){
+
+	$bShowDebug = true;
+
+	if ($user_id == null){
+		$userRecord = $_SESSION['login_account'];
+	}else {
+		$userRecord = getUserRecord($user_id);
+		if ($userRecord =='')
+			return 0;
+	}
+
+	if ($bPaidLeave == PAID_LEAVE)  // defined in config.php
+ 		$sql_inner = " and is_paid_leave='Y' ";
+	else $sql_inner = " and is_paid_leave='N' ";
+
+	$sStatus_sql = $sStatus_sql ? " and (".$sStatus_sql.") "  : '';
+
+	$balance = getBereavementLeaveEntitlement($requested_date, $userRecord['id'],$bPaidLeave, $bShowDebug);
+
+	if ($requested_date == null ){
+		$pick_year = date('Y');
+	}else { $pick_year = substr( $requested_date, 0, 4); }
+
+	$hdb = getConnection(); // defined in php-lib/DatabaseClass.php
+	$sql = "select COALESCE(SUM(number_of_day), 0) as total_day  from leave_detail
+	where user_id=:id and type_of_leave='BEREAVEMENT_LEAVE' $sql_inner $sStatus_sql and leave_date like '$pick_year-%'";
+	$params = array('id'=>$user_id);
+	$aResult = $hdb->query($sql, $params);
+	//echo $hdb->odo_sql_debug($sql, $params);
+
+	$total_leave = count($aResult) >0 ? $aResult[0]['total_day'] : 0;
+
+	if ($bShowDebug) { echo "<!-- Total ". ($bPaidLeave ? " paid " : 'unpaid') . "  bereavement leave entitlement = $balance --> \r\n "; }
+	if ($bShowDebug) { echo "<!-- Total ". ($bPaidLeave ? " paid " : 'unpaid') . "  bereavement leave taken = $total_leave --> \r\n "; }
+
+	$totalBalance = $balance - $total_leave;
+	$totalBalance = $totalBalance <=0 ? 0 : $totalBalance;
+
+	if ($bShowDebug) { echo "<!-- Total ". ($bPaidLeave ? " paid " : 'unpaid') . "  bereavement leave = $totalBalance --> \r\n "; }
+
+	return $totalBalance;
+}
+*/

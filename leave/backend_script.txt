@@ -1,0 +1,43 @@
+<?php
+include_once 'include.php';
+
+$hdb = getConnection();
+
+$id =$_SESSION['login_account']['id'];
+
+
+
+$startdate = $_POST['startdate'];
+$enddate = $_POST['enddate'];
+$single_day_dropdown = $_POST['single_day_dropdown'];
+
+
+if($single_day_dropdown == 'morning'){
+  $extend_sql =' and (leave_time="full_day" or leave_time ="morning")';
+}elseif ($single_day_dropdown == 'afternoon') {
+  $extend_sql =' and (leave_time="full_day" or leave_time ="afternoon")';
+}else {
+  $extend_sql =' and (leave_time="full_day" or leave_time ="morning" or leave_time ="full_day")';
+}
+
+
+
+$sql = "SELECT count(*) as total from leave_table where start_date <=:enddate  AND end_date >=:startdate AND (status ='Pending' OR status='Approved' OR status='Confirmed') and user_id =:userid $extend_sql";
+
+$parameters=array('startdate'=>$startdate,'enddate'=>$enddate, 'userid'=> $id);
+
+$result = $hdb->query($sql,$parameters);
+
+$count =$result[0]['total'];
+//print_r($result );
+
+if($count > 0){
+  echo 'overlap';
+}else {
+  echo 'valid';
+}
+
+
+
+
+?>

@@ -1,0 +1,508 @@
+<?php include 'header.php'; ?>
+
+<?php
+
+if(!isset($_SESSION["isLogin"]) || $_SESSION["isLogin"] !== true ){
+	header("location: login.php");
+	exit;
+}
+
+$company = $_SESSION['login_account']['company'];
+$user_id = $_SESSION['login_account']['id'];
+$login_role   = $_SESSION['login_account']['role'];
+
+	/*if (!isset($_SESSION['report']['company_id'])) {
+		$_SESSION['report']['company_id'] = md5('10');
+		$id = 1;
+		$store_name = "eSeeLYNX";
+	} *///else {
+		if (isset($_GET['reload']) && $_GET['reload'] == 'Y') {
+			$_SESSION['report']['company_id'] = $_GET['sid'];
+
+			$hdb = getConnection();   // define in php-lib/DatabaseClass.php
+			$sSql = "select * from company where id = '". $_SESSION['report']['company_id'] ."'";
+	//		print $sSql;
+			$dResults = $hdb->query($sSql);
+	//		print_r($dResults);
+			if (count($dResults)>0) {
+				$id = $dResults[0]['id'];
+				$store_name = $dResults[0]['company_name'];
+
+		}
+
+}else {
+	$hdb = getConnection();
+	$sSql = "SELECT DISTINCT c.company_name,c.id
+		FROM user u
+		JOIN company c ON FIND_IN_SET(c.id,u.company)
+		WHERE u.id = $user_id";
+
+		$dResults = $hdb->query($sSql);
+
+		$id = $dResults[0]['id'];
+		$store_name = $dResults[0]['company_name'];
+
+}
+	//}
+
+
+	//Some constants
+	$iCellHeight = 80;
+	$aHeader = array(
+						/*array("title" => "Week", "width" => "10%"),*/
+						array("title" => "Sunday", "width" => "15%"),
+						array("title" => "Monday", "width" => "15%"),
+						array("title" => "Tuesday", "width" => "15%"),
+						array("title" => "Wednesday", "width" => "15%"),
+						array("title" => "Thursday", "width" => "15%"),
+						array("title" => "Friday", "width" => "15%"),
+						array("title" => "Saturday", "width" => "15%"),
+	);
+
+?>
+<script language="javascript">
+<!--
+	function navSubmit(mode, week, month, year) {
+		location.href = "<?=$_SERVER['PHP_SELF']?>?mode="+mode+"&week="+week+"&month="+month+"&year="+year+"&start=<?php echo isset($mondayStart) ? $mondayStart : '' ?>&sid=<?php echo $id; ?>&reload=Y";
+	}
+
+function openWindow(sLink, iWidth,iHeight) {
+	if (self.screen) {     // for NN4 and IE4
+        y = (screen.height - iHeight)/2;
+        x = (screen.width - iWidth)/2;
+	} else if (self.java) {   // for NN3 with enabled Java
+       var jkit = java.awt.Toolkit.getDefaultToolkit();
+       var scrsize = jkit.getScreenSize();
+        y = (scrsize.height - iHeight)/2;
+        x = (scrsize.width - iWidth)/2;
+	} else {
+		x = (640 - iWidth)/2, y = (480 - iHeight)/2;
+
+	}
+    window.open(sLink,'mywindow','width='+iWidth+',height='+iHeight+',screenX='+x+',screenY='+y+',top='+y+',left='+x+',resizable=yes,menubar=no,scrollbars=no');
+}
+
+//-->
+</script>
+<script language="JavaScript1.2">
+<!--
+	function reloadStore(){
+		window.location = "<?=$_SERVER['PHP_SELF']?>?reload=Y&sid="+document.frmStore.store.value;
+	}
+//-->
+</script>
+
+<link href="css/calendar.css" rel="stylesheet" type="text/css" />
+
+<h2 id="list_header">
+Confirmed Record Calendar
+
+
+
+</h2>
+<div align="center">
+<!--<span class="green_cap">Leave Event</span><img src="/images/spacer.gif" width="1" height="10"><br>-->
+
+<br>
+
+<?
+	$iUpdateYear = 0;
+	$iUpdateMonth = 0;
+//	if (formVar('mode') == "plus") {
+		$iUpdateYear = formVar("year");
+		$iUpdateMonth = formVar("month");
+//	} else if (formVar('mode') == "minus") {
+//		$iUpdateYear = 0 - formVar("year");
+//		$iUpdateMonth = 0 - formVar("month");
+//	}
+//	print "year: $iUpdateYear, month: $iUpdateMonth";
+
+	//The calendar consists of 6 rows
+	$iFirstofThisMonth = mktime(12, 0, 0, date("n")+$iUpdateMonth, 1, date("Y")+$iUpdateYear);
+	$iThisMonth = date('m', $iFirstofThisMonth);
+	$iThisYear = date('Y', $iFirstofThisMonth);
+	$iEndofThisMonth = mktime(12, 0, 0, date("n")+$iUpdateMonth+1, 0, date("Y")+$iUpdateYear);
+	$iDayOffset = 1;
+	$iWeekOffset = date("W", $iFirstofThisMonth);
+	$bIsDayStart = false;
+	$bIsDayEnd = false;
+	$dContent = getMonthData();
+//	print_r($dContent);
+
+
+
+
+
+
+	function getMonthData() {
+		global $iThisYear, $iThisMonth;
+
+		$hdb = getConnection();   // define in php-lib/DatabaseClass.php
+
+		$sSql = "select *  from leave_detail where YEAR(leave_date)= '". $iThisYear ."' and MONTH(leave_date) = '". $iThisMonth ."' and status='Confirmed' order by leave_date";
+//		print $sSql;
+
+		$dResults = $hdb->query($sSql);
+
+		$dReturn = array();
+		if (count($dResults) > 0) {
+			foreach ($dResults as $iIndex => $dData) {
+				//$dReturn = array_merge($dReturn, array('S'.$dData['year'].$dData['month'].$dData['day'] => $dData));
+				$dReturn = array_merge($dReturn, array('S'.$dData['leave_date'] => $dData));
+			}
+		}
+		return $dReturn;
+	}
+
+
+
+	showNavBar();
+
+
+?>
+<form name="frmStore" action="<?=$_SERVER['PHP_SELF']?>" method="post" style="display:inline">
+<table cellpadding="0" cellspacing="0" border="0" width="100%">
+	<tr>
+		<td colspan="8" class="calendarMonthYear" align="center">
+			<?=date("F Y", $iFirstofThisMonth);?>
+			<select onchange="reloadStore(this)" name="store">
+		<?php
+
+		$user_id = $_SESSION['login_account']['id'];
+
+		echo getMD5Selection2($user_id ,$id);
+
+
+		?>
+			</select>
+		<br><img src="/images/spacer.gif" width="1" height="10"></td>
+	</tr>
+
+	<tr>
+<?
+	foreach($aHeader as $iIndex => $dData) {
+?>
+		<td align="center" class="calendarHeader" style="border: 1px solid #ADD8E6 ;width:<?=$dData['width']?> "><br><?=$dData['title']
+		?></td>
+<?
+	}
+?>
+	</tr>
+
+	<tr>
+<?
+
+	for ($iRow = 0; $iRow <=6; $iRow++) {
+?>
+		<!--<td align="center" valign="top" class="rowHeader" style="border: 1px solid #ADD8E6"><?=$iWeekOffset?></td>-->
+<?
+		for ($iWeekday = 0; $iWeekday<=6; $iWeekday++) {
+
+			if (($bIsDayStart && !$bIsDayEnd) || (!$bIsDayStart && date("w", $iFirstofThisMonth) == $iWeekday)) {
+				$bIsDayStart = true;
+				$sCSS = (date("j") == $iDayOffset && date("n") == date("n", $iFirstofThisMonth) && date("Y") == date("Y", $iFirstofThisMonth))? "calendarToday" : "calendarCell";
+
+?>
+		<td align="right" valign="top" class="<?=$sCSS?>" style="border: 1px solid #ADD8E6;" id="box_<?=$iDayOffset?>"  >
+
+
+
+			<?php
+			//$iDayOffset = 26;
+			//$start_date = '2024-01-29';
+      //$day = date('d', strtotime($start_date));
+
+			$hdb = getConnection();
+
+			$companyid = $dResults[0]['id'];
+			$holiday_date_day_array = array();
+			$holiday_array = array();
+			$public_holiday_sql = "select * from public_holidays where date = '$iThisYear-$iThisMonth-$iDayOffset' AND is_delete ='N'";
+			$holiday_result = $hdb->query($public_holiday_sql);
+			foreach($holiday_result as $value => $label){
+				 $holiday=$label['holiday'];
+				 $year = $label['year'];
+
+
+					$holiday_date_day = date('d', strtotime($label['date']));
+					$holiday_date_month = date('m', strtotime($label['date']));
+
+						//echo '<div style="color:red">' .$holiday_date_day .' '.$holiday.'</div> <br>';
+
+
+					//if($holiday_date_month == $iThisMonth && $holiday_date_day == $iDayOffset && $year == $iThisYear){
+
+           $holiday_date_day_array[] = $holiday_date_day;
+        	 $holiday_array[] = $holiday;
+						echo '<div style="color:red">' .$holiday_date_day .' '.$holiday.'</div> <br>';
+					//}
+
+			}
+
+			if(in_array($iDayOffset,$holiday_date_day_array)){
+				echo '';
+			}else {
+
+				$iDayOffsetIsSunday	=	(date("w", strtotime(date("$iThisYear-$iThisMonth-$iDayOffset"))) == 0);
+
+				if($iDayOffsetIsSunday == $iDayOffset){
+					echo '<div style="color:red">' .$iDayOffset.'</div> <br>';
+				}else {
+					echo '<div style="">' .$iDayOffset .'</div> <br>';
+				}
+
+
+
+			}
+
+				//User only display once per day
+			{
+				$extramember='';
+
+
+				if($companyid == '1' ){
+					$extramember = "AND c.id ='$companyid' or (ld.user_id = '104' and ld.status = 'Confirmed' and ld.leave_date='$iThisYear-$iThisMonth-$iDayOffset') ";
+				}elseif ($companyid =='2' and $user_id =='104') {
+					$extramember = "AND (c.id ='1' or c.id='2'  )  or (ld.user_id = '104' and ld.status = 'Confirmed' and ld.leave_date='$iThisYear-$iThisMonth-$iDayOffset') ";
+				}
+				else {
+					$extramember = "AND c.id ='$companyid'";
+				}
+
+
+
+
+			$sql = "SELECT DISTINCT ld.user_id,ld.leave_date,ld.user_id ,lt.leave_time,u.first_name, u.last_name, ld.type_of_leave,ld.is_paid_leave
+							FROM leave_detail AS ld
+							LEFT JOIN user AS u ON ld.user_id = u.id
+							LEFT JOIN company AS c ON FIND_IN_SET(c.id, u.company)
+							LEFT JOIN
+							    leave_table AS lt ON ld.leave_record_id = lt.reference_id
+							WHERE ld.STATUS = 'Confirmed'  AND ld.leave_date ='$iThisYear-$iThisMonth-$iDayOffset'
+							$extramember
+							GROUP BY
+							ld.id, ld.leave_date, ld.user_id, u.first_name, u.last_name, ld.type_of_leave
+							";
+
+			$parameter = array('companyid' => $companyid);
+			$result = $hdb->query($sql);
+
+			//print_r($sql);
+
+			$previousId = null;
+
+
+
+			foreach($result as $value => $label){
+				$date = $label['leave_date'];
+				 $id = $label['user_id'];
+				 $first_name = $label['first_name'];
+				 $last_name = $label['last_name'];
+				 $type_of_leave = $label['type_of_leave'];
+				 $leave_time = $label['leave_time'];
+				 $is_paid_leave = $label['is_paid_leave'];
+
+
+				 $sleave_time='';
+				 $sType_of_leave = '';
+				 $sUnpaid = '';
+
+				$dayFromDateString = date('d', strtotime($date));
+				$monthFromString = date('m', strtotime($date));
+				$yearFromString = date('Y',strtotime($date));
+
+				$color = generateRandomLightColor($id);
+
+
+				//if ($dayFromDateString == $iDayOffset && $monthFromString == $iThisMonth && $yearFromString==$iThisYear) {
+
+					//if ($id != $previousId) {
+
+					if($is_paid_leave == 'N'){
+						$sUnpaid = '<div style="color:red;">Unpaid</div>';
+					}
+
+
+					if($leave_time != 'full_day'){
+						  $sleave_time =$leave_time;
+					}
+
+					if($login_role  != 'user'){
+
+						$selected_leave = $TYPE_OF_LEAVE[$type_of_leave];
+
+
+
+						$sType_of_leave = ' ['.$selected_leave['display_title']. '] <br>'.$sUnpaid;
+					}
+
+					echo '<div style="font-size: 1.2em; color:white; background-color: '.$color.'; padding: 10px;">' . $first_name . ' ' . $last_name . '<br>'.$sleave_time.''.$sType_of_leave.' </div> <br>';
+
+        //}
+				//}
+
+				$previousId = $id;
+
+			}
+
+		}
+
+
+
+
+
+
+			/*$iThisMonth;
+
+
+			if($day == $iDayOffset){
+				echo 'This is today';
+			}else {
+				echo $iDayOffset;
+
+			}*/
+
+
+			?>
+
+
+
+			<table cellpadding="0" cellspacing="0" border="0" width="100%">
+			<tr>
+				<td><img src="/images/spacer.gif" width="1" height="<?=$iCellHeight?>"></td>
+				<td align="center">
+
+				</td>
+				<td><img src="/images/spacer.gif" width="1" height="<?=$iCellHeight?>"></td>
+			</tr>
+			</table>
+		</td>
+<?
+				if (date("j", $iEndofThisMonth) == $iDayOffset)
+					$bIsDayEnd = true;
+
+				$iDayOffset++;
+
+			} else {
+?>
+
+		<td align="center" class="calendarCell" style="border: 1px solid #ADD8E6">
+
+
+		</td>
+<?
+			}
+		}
+?>
+	</tr>
+	<tr>
+<?
+		$iWeekOffset++;
+	}
+?>
+	</tr>
+	<tr>
+		<td colspan="8" class="calendarMonthYear" align="center"><img src="/images/spacer.gif" width="1" height="10"><br><?=date("F Y", $iFirstofThisMonth);?> (<?=$store_name?>)</td>
+	</tr>
+</table>
+<br>
+<?
+
+		showNavBar();
+?>
+</form>
+</div>
+
+
+
+<?php
+
+
+	//to print the navigation bar
+	function showNavBar() {
+
+		global $_GET;
+
+		$bIsPlus = isset($_GET['mode']) && ($_GET['mode'] == "plus");
+		$bIsMinus = isset($_GET['mode']) && ($_GET['mode'] == "minus");
+
+		$iPlusYear_month = 0;		$iPlusYear_year = 1;
+		$iPlusMonth_month = 1;		$iPlusMonth_year = 0;
+
+		$iMinusYear_month = 0;		$iMinusYear_year = 1;
+		$iMinusMonth_month = 1;		$iMinusMonth_year = 0;
+
+//		if ($bIsPlus) {
+			$iPlusYear_month = (formVar('month'))? formVar('month') : "0";		$iPlusYear_year = (formVar('year'))? formVar('year') + 1 : "1";
+			$iPlusMonth_month = (formVar('month'))? formVar('month') + 1 : "1";		$iPlusMonth_year = (formVar('year'))? formVar('year') : "0";
+
+			$iMinusYear_month = (formVar('month'))? formVar('month') : "0";		$iMinusYear_year = (formVar('year') || formVar('year')==0)? formVar('year') - 1 : "1";
+			$iMinusMonth_month = (formVar('month') || formVar('month')==0)? formVar('month') - 1 : "1";		$iMinusMonth_year = (formVar('year'))? formVar('year') : "0";
+//		} else if ($bIsMinus) {
+//			$iPlusYear_month = (formVar('month'))? formVar('month') : "0";		$iPlusYear_year = (formVar('year'))? formVar('year') + 1 : "1";
+//			$iPlusMonth_month = (formVar('month'))? formVar('month') + 1 : "1";		$iPlusMonth_year = (formVar('year'))? formVar('year') : "0";
+
+//			$iMinusYear_month = (formVar('month'))? formVar('month') : "0";		$iMinusYear_year = (formVar('year'))? formVar('year') - 1 : "1";
+//			$iMinusMonth_month = (formVar('month'))? formVar('month') - 1 : "1";		$iMinusMonth_year = (formVar('year'))? formVar('year') : "0";
+//		}
+?>
+
+
+<table width="1100" height="45" border="0" cellpadding="0" cellspacing="0">
+  <tr>
+    <td background="/images/report_car_bg.gif"><div align="center">
+
+	<!--<img src="/images/back_yr.gif" width="74" height="21" hspace="5" style="cursor:pointer" onClick="navSubmit('minus', 0, <?=$iMinusYear_month?>, <?=$iMinusYear_year?>)"  alt="Previous Year" title="Previous Year"  />-->
+	<img src="images/previous-back-svgrepo-com.svg" width="80" height="21" hspace="5" style="cursor:pointer" onClick="navSubmit('minus', 0, <?=$iMinusMonth_month?>, <?=$iMinusMonth_year?>)" alt="Previous Month" title="Previous Month" />
+	<button style="cursor:pointer; background-color: #2f669e; color: #fff; border: none; padding: 5px 10px; margin: 0;" onclick="location.href='<?=$_SERVER['PHP_SELF']?>'" title="TODAY">
+    TODAY
+</button>
+
+
+	<img src="images/next-arrow-forward-svgrepo-com.svg" width="80" height="21" hspace="5" style="cursor:pointer" onClick="navSubmit('plus', 0, <?=$iPlusMonth_month?>, <?=$iPlusMonth_year?>)" alt="Next Month" title="Next Month" />
+	<!--<img src="/images/next_yr.gif" width="74" height="21" hspace="5" style="cursor:pointer" onClick="navSubmit('plus', 0, <?=$iPlusYear_month?>, <?=$iPlusYear_year?>)"  alt="Next Year" title="Next Year" /></div></td>-->
+  </tr>
+</table>
+
+<img src="/images/spacer.gif" width="1" height="10"><br>
+
+<?php
+	}
+
+
+
+
+	function getMD5Selection2($user_id,$selValue ){
+
+		$total = 0;
+		$hdb = getConnection();   // define in php-lib/DatabaseClass.php
+
+		/*$where = ($where)? " where $where " : "" ;
+		$orderby = ($orderby)? " order by $orderby " : " order by id " ;
+		$sql = " select *, md5(id) as md5id from $table $where $orderby " ;*/
+
+
+		$sql = "SELECT DISTINCT c.company_name,c.id
+		FROM user u
+		JOIN company c ON FIND_IN_SET(c.id,u.company)
+		WHERE u.id = $user_id";
+
+
+		//print $sql;
+		$dRecord = $hdb->query($sql);
+
+		if (count($dRecord) > 0){
+			foreach ($dRecord as $iIndex => $l) {
+				$company = $l['company_name'];
+				//if( $l[ $field ] ) {
+					//$company_name = $l['company_name'];
+					$selected = ( $l[ 'id' ] == $selValue ) ? " selected " : "" ;
+					print "<option value='" . $l[ "id" ] . "' $selected >" . $company. "</option>\n" ;
+					$total ++;
+				//}
+			}
+		}
+
+		return $total;
+	}
+?>

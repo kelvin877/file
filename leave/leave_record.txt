@@ -1,0 +1,1559 @@
+<?php include 'header.php'; ?>
+
+<?php
+//session_start();
+//include_once 'include.php';
+
+
+
+
+//print_r($_REQUEST);
+$date = date('Y-m-d H:i:s');
+
+//$hdb = getConnection();
+if(!isset($_SESSION["isLogin"]) || $_SESSION["isLogin"] !== true ){
+  header("location: login.php");
+  exit;
+}
+$current_year = date('Y');
+
+$action =  isset($_REQUEST[ "action" ]) && trim($_REQUEST[ "action" ]) ? trim( $_REQUEST[ "action" ] ) : '';
+$role_p =  isset($_REQUEST[ "p" ]) && trim($_REQUEST[ "p" ]) ? trim( $_REQUEST[ "p" ] ) : '';
+//$list_selected = isset($_REQUEST[ "list_selected" ]) && trim($_REQUEST[ "list_selected" ]) ? trim( $_REQUEST[ "list_selected" ] ) : 'PENDING_LIST';
+$year_select = isset($_REQUEST[ "yearSelect" ]) && trim($_REQUEST[ "yearSelect" ]) ? trim( $_REQUEST[ "yearSelect" ] ) : $current_year;
+$leave_type_select = isset($_REQUEST[ "leave_type_select" ]) && trim($_REQUEST[ "leave_type_select" ]) ? trim( $_REQUEST[ "leave_type_select" ] ) : 'show_all';
+
+$company = isset($_REQUEST['company']) && $_REQUEST['company'] ? trim($_REQUEST['company']) : 'show_all';
+
+$role=$_SESSION['login_account']['role'];
+
+if($role == 'admin'){
+  $list_selected = isset($_REQUEST[ "list_selected" ]) && trim($_REQUEST[ "list_selected" ]) ? trim( $_REQUEST[ "list_selected" ] ) : 'APPROVED_LIST';
+}elseif ($role == 'user' || ($role == 'supervisor' && $role_p!= 'admin')) {
+  $list_selected = isset($_REQUEST[ "list_selected" ]) && trim($_REQUEST[ "list_selected" ]) ? trim( $_REQUEST[ "list_selected" ] ) : 'SHOW_ALL';
+}
+else {
+  $list_selected = isset($_REQUEST[ "list_selected" ]) && trim($_REQUEST[ "list_selected" ]) ? trim( $_REQUEST[ "list_selected" ] ) : 'PENDING_LIST';
+}
+
+$id =$_SESSION['login_account']['id'];
+
+$firstname=$_SESSION['login_account']['first_name'];
+$lastname=$_SESSION['login_account']['last_name'];
+$fullname = $firstname.' '.$lastname;
+
+
+$email=$_SESSION['login_account']['email'];
+$type_of_employment = $_SESSION['login_account']['type_of_employment'];
+
+
+$companyArray = explode(',', $company);
+$firstCompany = $companyArray[0];
+
+//echo $firstCompany;
+
+if($firstCompany == 'show_all'){
+  $sql = "select * from company";
+}else {
+  $sql = "select * from company where id= $firstCompany";
+}
+$result = $hdb->query($sql);
+
+/*$sql ="select * from company where id = $firstCompany";
+$result = $hdb->query($sql);*/
+if(count($result)>0){
+  $value = $result[0];
+  $company_name = $value['company_name'];
+  $type = $value['incorporation_type'];
+}
+
+
+
+
+
+
+function isAdmin(){
+  //$role=$_SESSION['login_account']['role'];
+  $notallowedRole = array('user');
+
+
+  return isset($_SESSION['login_account']) && !in_array($_SESSION['login_account']['role'], $notallowedRole);
+
+}
+
+
+function handleRestrictedParameter($param){
+  if(isAdmin()){
+    //echo "hello";
+  }else {
+    //header('HTTP/1.1 403 Forbidden');
+    //echo "Access Forbidden.";
+    redir("leave_record.php");
+    exit;
+  }
+}
+
+
+if(isset($_GET['p'])){
+  handleRestrictedParameter($_GET['p']);
+}
+if ( ($role == 'executive' || $role == 'payroll' || $role == 'admin') && !isset($_GET['p'])) {
+  redir("leave_record.php?p=admin");
+  exit; // Exit to prevent further script execution after the header redirection
+}
+/*if($role =='admin' && !isset($_GET['p'])){
+header("location: leave_record.php?p=admin");
+}*/
+
+
+/*else {
+header('HTTP/1.1 403 Forbidden');
+//echo "Access Forbidden.";
+exit;
+}*/
+
+
+
+
+/*if($action == 'cancel'){
+  $hdb = getConnection();
+  $sql = "Update leave_table set status='Cancelled',is_cancel='Y',cancel_at=:date where reference_id=:id";
+  $parameters = array('id'=>$uid,'date'=>$date);
+  $hdb->query($sql,$parameters);
+
+}
+
+
+
+if(isset($_POST['cancel'])){
+  $reference_id =$_POST['cancel'];
+  $sql="Update leave_table set is_cancel='Y',status='Cancelled' where reference_id=:reference_id";
+  $parameters=array('reference_id'=>$reference_id);
+  //print_r($parameters);
+  $hdb->query($sql,$parameters);
+
+}*/
+
+
+main();
+
+function main(){
+  echo show_form();
+
+}
+
+
+?>
+
+
+<?php function show_form() {
+
+  global $action;
+  global $STATUS_LIST;
+  global $list_selected;
+  global $role_p;
+  global $year_select;
+  global $role;
+  global $company;
+  global $TYPE_OF_LEAVE;
+  global $leave_type_select;
+  global $id;
+  global $type;
+
+  $hdb = getConnection();
+  ?>
+  <form id="listForm" action="" method="post">
+    <div class="row">
+      <h2 id="list_header"><?php
+
+      if(isset($_POST['yearSelect'])){
+        if($_POST['yearSelect'] =='show_all'){
+          echo '';
+        }else {
+          echo $_POST['yearSelect']. ' ' ?? '';
+        }
+
+      }else {
+        echo '';
+      }
+
+      if (isset($_POST['list_selected'])) {
+        if($STATUS_LIST[$_POST['list_selected']] == $STATUS_LIST['SHOW_ALL']){
+          echo 'All Status ';
+        }else {
+          echo $STATUS_LIST[$_POST['list_selected']]. ' ' ?? '';
+        }
+
+      } else {
+        if($role == 'admin'){
+          echo $STATUS_LIST['APPROVED_LIST']. ' ';
+        }elseif ($role == 'user' || ($role == 'supervisor' && $role_p!='admin')) {
+          echo $STATUS_LIST['SHOW_ALL']. ' ';
+        }else {
+          echo $STATUS_LIST['PENDING_LIST']. ' ';
+        }
+
+      }
+
+
+      if(isset($_POST['leave_type_select'])){
+        if($_POST['leave_type_select'] == 'show_all'){
+          echo 'Leave';
+        }else {
+          $selected_leave = $TYPE_OF_LEAVE[$_POST['leave_type_select']];
+
+
+
+          echo $selected_leave['display_title'] ?? '';
+        }
+      } else {
+        echo 'Leave';
+      }?> Records</h2>
+
+      <div style="width:auto; margin:0px; padding:0 10px;">Filter:</div>
+      <select class="form-select form-control-lg " name="list_selected"  onchange="submitForm()">
+
+        <?php
+        foreach ($STATUS_LIST as $value => $label) {
+          //$hidden  = ($value === 'PENDING_LIST' && $role=='user') ? 'hidden' : '';
+
+          $selected = (isset($_POST['list_selected']) && $_POST['list_selected'] == $value) ? 'selected' : '';
+
+
+          if (!isset($_POST['list_selected']) && $role !== 'admin') {
+            if ($value === 'SHOW_ALL' && $role =='user') {
+              $selected = 'selected';
+            }elseif($value === 'PENDING_LIST' && ($role =='supervisor' || $role =='executive') && $role_p == 'admin') {
+              $selected = 'selected';
+            }
+          } elseif (!isset($_POST['list_selected']) && $role === 'admin' && $value === 'APPROVED_LIST') {
+            $selected = 'selected';
+          }
+
+
+          echo '<option value="' . $value . '"  ' . $selected . '>' . $label . ' &nbsp; &nbsp;</option>';
+        }
+        ?>
+      </select>
+      <select  class="form-select form-control-lg" name="yearSelect" onchange="submitForm()">
+
+        <option value="show_all" >All Year &nbsp; &nbsp;&nbsp;&nbsp;</option>
+        <?php
+        $current_year = date('Y');
+        $end_year = $current_year - 7;
+        $selected_year = isset($_POST['yearSelect']) ? $_POST['yearSelect'] : $current_year ;
+
+        for ($year = $current_year + 1; $year >= $end_year; $year--) {
+          $selected = ($selected_year === (string)$year) ? 'selected' : '';
+          echo '<option value="' . $year . '" ' . $selected . '>' . $year . '</option>';
+        }
+
+        ?>
+      </select>
+      <?php
+      $companyid =$_SESSION['login_account']['company'];
+      $currentURL = $_SERVER['SCRIPT_NAME'];
+
+      //echo $currentURL;
+
+
+      if(strpos($companyid,',') && ($role_p =='admin') ): ?>
+      <select class="form-select form-control-lg" name="company" onchange="submitForm()">
+
+        <option value="show_all">Show All &nbsp; &nbsp; &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</option>
+        <?php
+        $sql = "SELECT DISTINCT c.company_name,c.id
+        FROM user u
+        JOIN company c ON FIND_IN_SET(c.id,u.company)
+        WHERE u.id = $id";
+
+        $company_option=$hdb->query($sql);
+
+        if(count($company_option)>0){
+          foreach ($company_option as $value => $label) {
+            $value = $label['id']; // Replace 'company_id' with the actual column name for the option value
+            $label = $label['company_name'];
+            //$hidden  = ($value === 'PENDING_LIST' && $role=='user') ? 'hidden' : '';
+
+            $selected = (isset($_POST['company']) && $_POST['company'] == $value) ? 'selected' : '';
+            echo '<option value="' . $value . '"  ' . $selected . '>' . $label . '</option>';
+          }
+        }
+        ?>
+      </select>
+    <?php endif; ?>
+    <select class="form-select form-control-lg" name="leave_type_select" onchange="submitForm()">
+
+      <option value="show_all" >All Leave </option>
+      <?php
+
+      foreach ($TYPE_OF_LEAVE as $value => $label) {
+        //$hidden  = ($value === 'PENDING_LIST' && $role=='user') ? 'hidden' : '';
+        $incorption_type =$label['incorption_type'];
+        $display_title = $label['display_title'];
+
+
+        if($type == $incorption_type || $incorption_type == 'both'){
+
+
+        $selected = (isset($_POST['leave_type_select']) && $_POST['leave_type_select'] == $value) ? 'selected' : '';
+
+        echo '<option value="' . $value . '"  ' . $selected . '>' . $display_title . '</option>';
+
+
+      }
+      }
+
+
+      ?>
+
+    </select>
+    <!--  <input  type="submit" value="Filter">-->
+  </div>
+</form>
+
+<div style="position:block; padding-top: 50px">
+  <small>
+    Date format is YYYY-MM-DD <br>
+  </small>
+  <p style="font-size:20px; margin-top:20px;">The number of balance days remaining is up till the <strong>End date</strong> not including the <strong>No. of days</strong> the request submitted except the status is <strong>CONFIRMED</strong>.</p>
+</div>
+<div id="tooltip"></div>
+<table id="formtable" class="table table-striped display " style="width:100%">
+  <thead>
+    <tr>
+
+      <th></th>
+      <th>Status</th>
+    <?php if($role != 'user' ): ?>
+      <th>Action</th>
+    <?php endif; ?>
+      <?php if($role_p !='' ):?>
+        <th>Employee name</th>
+      <?php endif; ?>
+      <th>Start date</th>
+      <th>End date</th>
+      <th>No. Of days</th>
+      <th data-toggle="tooltip" title="# of balance days is up till the End date not including the # of days the request submitted except the status is CONFIRMED" >Balance days remaining after reduction</th>
+      <th>Company</th>
+      <th>Leave type</th>
+      <th>Submit date</th>
+
+
+      <th>Status details</th>
+      <th>Remark</th>
+      <th>Regular day(s) off</th>
+
+
+      <th>Date List</th>
+
+
+    </tr>
+  </thead>
+
+  <tbody>
+    <?php
+    global $id,$action,$firstname,$fullname,$email;
+
+    $company_id_value =$_SESSION['login_account']['company'];
+
+
+
+
+
+    $hdb = getConnection();
+    $year_select_sql = "";
+    $leave_type_select_sql = "";
+    $company_select = "";
+    $list_selected_sql = "";
+
+
+    /*if(isset($_POST['company'])){
+    $companyid=$_POST['company'];
+    //echo $companyid;
+  }else {
+  $companyid =$companyid;
+}*/
+
+$companyArray=explode(',',$company_id_value);
+$companyid=$companyArray[0];
+$company_sql="";
+
+
+if(isset($_POST['company'])){
+  $companyid=$_POST['company'];
+}
+
+/*if($company !=='show_all'){
+$company_sql = " (FIND_IN_SET($companyid, company) > 0 OR FIND_IN_SET($companyid, user.company) > 0) AND";
+}*/
+
+$company_sql ="(";
+if($company =='show_all'){
+  foreach($companyArray as $index => $value){
+    if($index >0){
+      $company_sql .= " OR";
+    }
+    $company_sql .= " FIND_IN_SET($value, company) > 0 OR FIND_IN_SET($value, user.company) > 0";
+  }
+
+}else {
+  $company_sql .= " FIND_IN_SET($companyid, company) > 0 OR FIND_IN_SET($companyid, user.company) > 0";
+}
+
+$company_sql .= ") AND";
+//}
+
+
+
+
+if($leave_type_select!=='show_all'){
+  $leave_type_select_sql = "type_of_leave='$leave_type_select' AND ";
+}
+
+if($year_select !=='show_all'){
+  $year_select_sql = "YEAR(start_date)=$year_select AND ";
+}
+
+if($role_p){
+  //Check different privileges to approve and deny
+  if($_SESSION['login_account']['role']=='executive'){
+    $sql_check_role = " ROLE ='supervisor' AND ";
+  }
+  elseif ($_SESSION['login_account']['role']=='supervisor'){
+    $sql_check_role = " ROLE !='executive' AND ROLE !='supervisor' AND ";
+  }elseif ($_SESSION['login_account']['role']=='admin'||$_SESSION['login_account']['role']=='payroll') {
+    $sql_check_role = "";
+  }
+}else {
+  $sql_check_role = "user_id=$id AND";
+}
+
+
+
+if ($list_selected === 'PENDING_LIST'){
+  $list_selected_sql =" leave_table.is_cancel='N' AND status='Pending' GROUP BY user.id, leave_table.reference_id";
+
+}
+elseif ($list_selected === 'APPROVED_LIST') {
+  $list_selected_sql =" leave_table.is_cancel='N' AND status='Approved' GROUP BY user.id, leave_table.reference_id";
+}
+elseif ($list_selected === 'CONFIRMED_LIST') {
+  $list_selected_sql =" leave_table.is_cancel='N' AND status='Confirmed' GROUP BY user.id, leave_table.reference_id";
+}
+elseif ($list_selected === 'REJECTED_LIST') {
+  $list_selected_sql =" leave_table.is_cancel='N' AND status='Rejected'  GROUP BY user.id, leave_table.reference_id";
+}
+elseif ($list_selected === 'Cancelled_LIST') {
+  $list_selected_sql =" leave_table.is_cancel='Y' AND status='Cancelled'  GROUP BY user.id, leave_table.reference_id";
+}
+elseif ($list_selected === 'SHOW_ALL' ) {
+  $list_selected_sql = " (leave_table.is_cancel='N' or leave_table.is_cancel='Y')  GROUP BY user.id, leave_table.reference_id ORDER BY CASE
+  WHEN status='Approved' THEN 1
+  WHEN status='Pending' THEN 2
+  WHEN status='Confirmed' THEN 3
+  WHEN status='Rejected' THEN 4
+  WHEN status='Cancelled' THEN 5
+  END, leave_table.start_date";
+}elseif ($list_selected === 'SHOW_ALL' && $role_p != 'admin') {
+  $list_selected_sql = " (leave_table.is_cancel='N' or leave_table.is_cancel='Y')  GROUP BY user.id, leave_table.reference_id ORDER BY start_date DESC";
+}
+
+
+
+
+
+$sql = "SELECT leave_table.*,
+user.*,
+GROUP_CONCAT(DISTINCT c.company_name SEPARATOR ', ') AS combined_company_names,
+leave_table.created_at AS user_created_at,
+c.*
+FROM user
+LEFT JOIN company AS c ON FIND_IN_SET(c.id, user.company) > 0
+INNER JOIN leave_table ON leave_table.user_id=user.id
+WHERE $leave_type_select_sql $year_select_sql $sql_check_role $company_sql $list_selected_sql";
+
+//print_r($sql);
+//This is not for user
+
+
+$reportResult=$hdb->query($sql);
+
+//print_r($sql);
+//print_r($sql);
+
+
+if(count($reportResult)>0){
+  $offdaysum = 0;
+  $balance_day =10;
+  $annual_offdaySumByUserId = array();
+  $sick_leave_offdaySumByUserId = array();
+  $personal_leave_offdaySumByUserId= array();
+  $bereavement_leave_offdaySumByUserId = array();
+
+
+  foreach ($reportResult as $key => $value) {
+
+    $reference_id=$value['reference_id'];
+    $username=$value['user_name'];
+    $userid=$value['user_id'];
+    $start_date=$value['start_date'];
+    $end_date=$value['end_date'];
+    $create_date=$value['user_created_at'];
+    $create_date=new DateTime($create_date);
+    $leave_time =$value['leave_time'];
+
+    $number_of_day=$value['number_of_day'];
+    $type_of_leave =$value['type_of_leave'];
+    $status=$value['status'];
+    $staff_id=$value['staff_id'];
+    $company =$value['combined_company_names'];
+    $type_of_employment = $value['type_of_employment'];
+    $leave_record_id = $value['reference_id'];
+    $regular_day_off = $value['regular_day_off'];
+    $comment = $value['comment'];
+    $reject_note = $value['reject_note'];
+    $cancel_note = $value['cancel_note'];
+    $approve_note = $value['approve_note'];
+
+    $display_balance_day = $value['balance_day_until_end_date'];
+    $type =$value['incorporation_type'];
+
+    //if($type_of_leave != 'ANNUAL'){
+      $check_paid_sql = "select * from leave_detail where leave_record_id ='$reference_id' ";
+      $paid_result = $hdb->query($check_paid_sql);
+
+
+
+    //}
+
+
+
+
+    ?>
+    <form id="myForm" method="post" action="">
+      <?php
+      if ($status === 'Pending') {
+        echo '<tr class="pending">';
+      } else {
+        echo '<tr class="">';
+      }
+      ?>
+
+
+      <!--  <td class="details-control" data-id="<?php echo $reference_id; ?>">
+      <span class="arrow-right" ></span>
+
+    </td>-->
+
+    <td></td>
+    <td>
+      <?php
+      if ($status == 'Pending'){
+        echo '<span class="badge bg-info">PENDING</span>';
+      }elseif ($status == 'Confirmed'){
+        echo '<span class="badge bg-primary">CONFIRMED</span>';
+      }elseif ($status == 'Approved'){
+        echo '<span class="badge bg-success">APPROVED</span>';
+      }elseif ($status == 'Cancelled'){
+        echo '<span class="badge bg-secondary">CANCELLED</span>';
+      }elseif ($status == 'Rejected'){
+        echo '<span class="badge bg-secondary">REJECTED</span>';
+      }
+
+      echo " [#".$reference_id."]";
+      echo "<br>";
+      $balance_day='';
+
+      if($type_of_leave=='ANNUAL' && $status != 'Cancelled' && $status != 'Rejected' && $status!='Confirmed'){
+        if(array_key_exists($userid,$annual_offdaySumByUserId) ){
+          $annual_offdaySumByUserId[$userid] += $number_of_day;
+        }else {
+          $annual_offdaySumByUserId[$userid] = $number_of_day;
+        }
+
+
+
+        if($type_of_employment=='fulltime'){
+
+
+          $annual_leave_balance = calculateTotalLeaveEntitlement($end_date,$userid,NOT_ALLOW_USE_ENTITLEMENT);
+
+          //For Insert Annual balance day to DB
+          $balance_day_until_end_date = $annual_leave_balance-$number_of_day;
+
+
+
+        }
+
+      }
+
+      if($type_of_leave=='SICK_LEAVE' && $status != 'Cancelled' && $status != 'Rejected' && $status!= 'Confirmed'){
+        if(array_key_exists($userid,$sick_leave_offdaySumByUserId)){
+          $sick_leave_offdaySumByUserId[$userid] += $number_of_day;
+        }else {
+          $sick_leave_offdaySumByUserId[$userid] = $number_of_day;
+        }
+
+
+        if($type =='federal'){
+          $medical_leave_balance = calculateMedicalLeaveBalance($requested_date=$end_date,$userid,PAID_LEAVE,$bShowDebug=true,'',$type);
+        }elseif($type == 'bc') {
+          $medical_leave_balance = calculateMedicalLeaveBalance($requested_date=$end_date,$userid, PAID_LEAVE, $bShowDebug=true,'',$type) + calculateMedicalLeaveBalance($requested_date=$end_date,$userid, UNPAID_LEAVE, $bShowDebug=true,'',$type);
+        }
+
+
+
+
+        //For Insert Medical Balance to Db
+        if($type_of_employment=='fulltime'){
+          $balance_day_until_end_date = $medical_leave_balance - $number_of_day;
+
+        }
+
+      }
+      if($type_of_leave == 'BEREAVEMENT_LEAVE' && $status != 'Cancelled' && $status != 'Rejected' && $status != 'Confirmed'){
+
+        if(array_key_exists($userid,$bereavement_leave_offdaySumByUserId)){
+          $bereavement_leave_offdaySumByUserId[$userid] += $number_of_day;
+        }else {
+          $bereavement_leave_offdaySumByUserId[$userid] = $number_of_day;
+        }
+
+
+        $pay_bereavement_balance = calculateBereavementLeaveBalance($requested_date=$end_date,$userid,$type ,PAID_LEAVE);
+        $unpay_bereavement_balance = calculateBereavementLeaveBalance($requested_date=$end_date,$userid,$type ,UNPAID_LEAVE);
+
+
+
+        //For Insert Beravement balance day to DB
+        $balance_day_until_end_date = ($pay_bereavement_balance + $unpay_bereavement_balance)-$number_of_day;
+
+
+      }
+
+      if($type_of_leave=='PERSONAL_LEAVE' && $status != 'Cancelled' && $status != 'Rejected' && $status != 'Confirmed'){
+
+        if(array_key_exists($userid,$personal_leave_offdaySumByUserId)){
+          $personal_leave_offdaySumByUserId[$userid] += $number_of_day;
+        }else {
+          $personal_leave_offdaySumByUserId[$userid] = $number_of_day;
+        }
+
+
+
+        $pay_personal_balance =calculatePersonalLeaveBalance($requested_date=$end_date,$userid,PAID_LEAVE);
+        $unpay_personal_balance = calculatePersonalLeaveBalance($requested_date=$end_date,$userid,UNPAID_LEAVE);
+
+
+
+        //For Insert Personal balance into DB
+        $balance_day_until_end_date = ($pay_personal_balance + $unpay_personal_balance)-$number_of_day;
+
+
+      }
+
+
+
+      if($status == 'Confirmed' ){
+        echo '<a href="pdf.php?reference_id='.$reference_id.'&status='.$status.'" target="_blank"><img src="images/download.svg" border="0" alt="'.$username.'" detail" title="download '.$username.' detail" ></a>';
+      }else {
+        echo '<span></span>';
+      }
+
+
+      ?>
+    </td>
+
+
+    <?php if($role != 'user'): ?>
+    <td>
+      <?php  if(($role_p=='admin' && $_SESSION['login_account']['role']=='admin' && $status=='Confirmed') || ($role_p != 'admin' && $status=='Pending') ) : ?>
+
+        <button alt="Cancel <?php echo $fullname;  ?> Leave Record" title="Cancel <?php echo $fullname;  ?> Leave Record" type="button" class="cancel_button btn btn-danger" data-fullname="<?php echo $fullname; ?>" data-id="<?php echo $id;?>" data-email="<?php echo $_SESSION['login_account']['email']; ?>" data-claimid="<?php echo $reference_id; ?>">Cancel</button>
+
+      <?php endif; ?>
+
+      <?php
+      //ONly Supervisor and executive can approve
+      $allowedRoles = array('supervisor','executive');
+
+      if ($role_p=='admin'  && isset($_SESSION['login_account']['role']) && in_array($_SESSION['login_account']['role'], $allowedRoles) && $status=='Pending'): ?>
+      <!--<button alt="Approve <?php echo $fullname;  ?> Leave Record" title="Approve <?php echo $fullname;  ?> Leave Record" type="button" data-fullname="<?php echo $fullname; ?>" data-id="<?php echo $id; ?>" data-email="<?php echo $_SESSION['login_account']['email']; ?>" data-claimid="<?php echo $reference_id; ?>" class="approve_button btn btn-success">Approve</button>-->
+      <button alt="Approve <?php echo $fullname; ?> Leave Record" title="Approve <?php echo $fullname; ?> Leave Record" type="button"  class="approve_button btn btn-success" data-fullname="<?php echo $fullname; ?>" data-id="<?php echo $id; ?>" data-email="<?php echo $_SESSION['login_account']['email']; ?>" data-claimid="<?php echo $reference_id;?>">Approve</button>
+
+      <button alt="Reject <?php echo $fullname; ?> Leave Record" title="Reject <?php echo $fullname; ?> Leave Record" type="button"  class="reject_button btn btn-danger" data-fullname="<?php echo $fullname; ?>" data-id="<?php echo $id; ?>" data-email="<?php echo $_SESSION['login_account']['email']; ?>" data-claimid="<?php echo $reference_id;?>">Reject</button>
+    <?php endif; ?>
+
+    <?php if($role_p =='admin' && $_SESSION['login_account']['role']=='admin' && $status =='Approved'): ?>
+      <button alt="Confirm <?php echo $fullname;  ?> Leave Record" title="Confirm <?php echo $fullname;  ?> Leave Record" class="confirm_button btn btn-success"  type="button" data-typeleave="<?php echo $type_of_leave; ?>" data-fullname="<?php echo $fullname; ?>" data-id="<?php echo $id; ?>" data-email="<?php echo $_SESSION['login_account']['email']; ?>" data-claimid="<?php echo $reference_id; ?>"  data-startdate="<?php echo $start_date; ?>"  data-enddate="<?php echo $end_date; ?>"  data-userid="<?php echo $userid; ?>"  data-balanceday="<?php echo $balance_day_until_end_date; ?>">Confirm</button>
+      <button alt="Cancel <?php echo $fullname;  ?> Leave Record" title="Cancel <?php echo $fullname;  ?> Leave Record" class="cancel_button btn btn-danger" type="button" data-fullname="<?php echo $fullname; ?>" data-id="<?php echo $id; ?>" data-email="<?php echo $_SESSION['login_account']['email']; ?>" data-claimid="<?php echo $reference_id; ?>">Cancel</button>
+    <?php endif; ?>
+
+  </td>
+<?php endif; ?>
+
+  <div class="modal fade" id="approve_note" tabindex="-1" role="dialog" aria-labelledby="myModalLabel" aria-hidden="true">
+    <div class="modal-dialog" role="document">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="myModalLabel">Approve Box</h5>
+          <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+            <span aria-hidden="true">&times;</span>
+          </button>
+        </div>
+        <div class="modal-body">
+          <input type="hidden" name="claim_id" id="claim_id" value="">
+          <p>Application Id: <span class="claim_id"></span></p>
+          <h3>Approve Comment</h3>
+          <textarea name="approve_comment" rows="8" style="resize: none; width: 100%;" id="approve_comment"></textarea>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary close" data-dismiss="modal">Close</button>
+          <button type="submit"  name="reject" id="reject" data-fullname="<?php echo $fullname; ?>" data-id="<?php echo $id; ?>" data-email="<?php echo $email; ?>" class="btn btn-primary approve-submit-btn">submit</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+
+
+
+
+
+
+
+
+  <div class="modal fade" id="cancel_note" tabindex="-1" role="dialog" aria-labelledby="myModalLabel" aria-hidden="true" >
+    <div class="modal-dialog" role="document" >
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="myModalLabel">Cancel</h5>
+          <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+            <span aria-hidden="true">&times;</span>
+          </button>
+        </div>
+        <div class="modal-body">
+          <input type="hidden" name="claim_id" id="claim_id" value="">
+          <p>Application Id: <span class="claim_id"></span></p>
+          <h3>Remark</h3>
+          <textarea name="cancel_comment" rows="8" style="resize: none; width: 100%;" id="cancel_comment"></textarea>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary close" data-dismiss="modal">Close</button>
+          <button type="submit"  name="reject" id="reject" data-fullname="<?php echo $fullname;?>" data-id="<?php echo $id; ?>" data-email="<?php echo $email; ?>" class="btn btn-primary cancel-submit-btn">submit</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+
+
+  <div class="modal fade" id="reject_note" tabindex="-1" role="dialog" aria-labelledby="myModalLabel" aria-hidden="true">
+    <div class="modal-dialog" role="document">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="myModalLabel">Remark</h5>
+          <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+            <span aria-hidden="true">&times;</span>
+          </button>
+        </div>
+        <div class="modal-body">
+          <input type="hidden" name="claim_id" id="claim_id" value="">
+          <p>Application Id: <span class="claim_id"></span></p>
+          <h3>Remark</h3>
+          <textarea name="reject_comment" rows="8" style="resize: none; width: 100%;" id="reject_comment"></textarea>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary close" data-dismiss="modal">Close</button>
+          <button type="submit"  name="reject" id="reject" data-fullname="<?php echo $fullname; ?>" data-id="<?php echo $id; ?>" data-email="<?php echo $email; ?>" class="btn btn-primary reject-submit-btn">submit</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+
+
+
+  <?php if($role_p != ''): ?>
+    <td><?php echo $username.' '.'(' . $staff_id . ')'; ?></td>
+
+  <?php endif; ?>
+  <td style="white-space: nowrap;"><?php echo $start_date; ?></td>
+  <td style="white-space: nowrap;"><?php echo $end_date; ?></td>
+  <?php
+    if($leave_time == 'morning'){
+      $leave_time_s = '<br>(Morning)';
+    }elseif ($leave_time == 'afternoon') {
+      $leave_time_s = '<br>(Afternoon)';
+    }else {
+      $leave_time_s = '';
+    }
+
+
+   ?>
+
+
+
+  <td><?php echo $number_of_day.$leave_time_s; ?></td>
+  <td>
+    <?php
+
+    /*if($userid=$id){
+    $offdaysum += $number_of_day;
+    echo calculateTotalLeaveEntitlement() - $offdaysum;
+  }*/
+  /*if(array_key_exists($userid,$offdaySumByUserId)){
+  $offdaySumByUserId[$userid] += $number_of_day;
+}else {
+$offdaySumByUserId[$userid] = $number_of_day;
+}*/
+$end_date_time = new DateTime($end_date);
+$end_date_year = $end_date_time->format('Y');
+
+
+
+if($type_of_leave=='ANNUAL' && $status != 'Cancelled' && $status != 'Rejected'){
+  /*if(array_key_exists($userid,$annual_offdaySumByUserId)){
+    $annual_offdaySumByUserId[$userid] += $number_of_day;
+  }else {
+    $annual_offdaySumByUserId[$userid] = $number_of_day;
+  }*/
+
+  if($type_of_employment=='fulltime'){
+
+    //$annual_leave_balance = calculateTotalLeaveEntitlement($end_date,$userid,NOT_ALLOW_USE_ENTITLEMENT);
+    //$pending_annual_leave_balance = calculateTotalLeaveEntitlement($end_date,$userid,NOT_ALLOW_USE_ENTITLEMENT,'status ="Approved" OR status ="Confirmed"');
+
+
+
+    if($status == 'Confirmed'){
+
+      if($end_date_year == $current_year){
+        echo $display_balance_day.'(Annual) <br>until '.$end_date;
+      }
+
+    }else {
+
+      if($annual_leave_balance - $number_of_day < 0){
+        echo '<img src="images/warning.png" alt="warning" title="Annual leave is not enough">'.$annual_leave_balance.'(Annual) <br> until '.$end_date;
+      }else {
+        echo $annual_leave_balance.'(Annual) <br> until '.$end_date;
+      }
+
+
+    }
+
+  }else {
+    echo '';
+
+  }
+
+}
+
+if($type_of_leave=='SICK_LEAVE' && $status != 'Cancelled' && $status != 'Rejected'){
+
+  //$medical_leave_balance = calculateMedicalLeaveBalance($requested_date=$end_date,$userid,PAID_LEAVE);
+
+  //$pending_medical_leave_balance = calculateMedicalLeaveBalance($requested_date=$end_date,$userid,PAID_LEAVE,'status ="Approved" OR status ="Confirmed"');
+
+  if($type_of_employment=='fulltime'){
+
+    if($status == 'Confirmed'){
+
+      if($end_date_year == $current_year){
+        echo $display_balance_day.'(Medical) <br> until '.$end_date;
+      }
+
+    }else {
+
+      if($medical_leave_balance - $number_of_day < 0){
+        echo '<img src="images/warning.png" alt="warning" title="Medical leave is not enough">'.$medical_leave_balance.'(Medical) <br> until '.$end_date;
+      }else {
+        echo $medical_leave_balance.'(Medical) <br> until '.$end_date;
+      }
+
+
+    }
+    /*if($status == 'Confirmed'){
+      echo $medical_leave_balance.'(Medical) until '.$end_date;
+    }elseif ($status == 'Pending' && $list_selected == 'PENDING_LIST') {
+      //echo $pending_medical_leave_balance - $sick_leave_offdaySumByUserId[$userid]."\n".'(Medical) Until Date: '.$end_date;
+      echo $medical_leave_balance.'(Medical) <br>until '."<br>".$end_date."<br>".'<strong>Not include </strong>';
+    }else {
+      echo $medical_leave_balance.'(Medical) <br>until '."<br>".$end_date."<br>".'<strong>Balance day are not deduct </strong>';
+      //echo $medical_leave_balance - $sick_leave_offdaySumByUserId[$userid]."\n".'(Medical) Until Date: '.$end_date;
+    }*/
+
+  }else {
+    echo '';
+  }
+
+}
+if($type_of_leave == 'BEREAVEMENT_LEAVE' && $status != 'Cancelled' && $status != 'Rejected'){
+
+  //$pay_bereavement_balance = calculateBereavementLeaveBalance($requested_date=$end_date,$userid,PAID_LEAVE);
+  //$unpay_bereavement_balance = calculateBereavementLeaveBalance($requested_date=$end_date,$userid,UNPAID_LEAVE);
+
+  //$pending_pay_bereavement_balance = calculateBereavementLeaveBalance_with_StatusSQL($requested_date=$end_date,$userid,PAID_LEAVE,'status ="Approved" OR status ="Confirmed"');
+  //$pending_unpay_bereavement_balance = calculateBereavementLeaveBalance_with_StatusSQL($requested_date=$end_date,$userid,UNPAID_LEAVE,'status ="Approved" OR status ="Confirmed"');
+
+  if($status == 'Confirmed'){
+
+    if($end_date_year == $current_year){
+      echo $display_balance_day.'(Bereavement) <br> until '.$end_date;
+    }
+
+  }else {
+
+    if(($pay_bereavement_balance + $unpay_bereavement_balance) - $number_of_day < 0){
+      echo '<img src="images/warning.png" alt="warning" title="Bereavement leave is not enough">'.($pay_bereavement_balance + $unpay_bereavement_balance).'(Bereavement) <br> until '.$end_date;
+    }else {
+      echo ($pay_bereavement_balance + $unpay_bereavement_balance).'(Bereavement) <br> until '.$end_date;
+    }
+
+  }
+
+
+  /*if($status == 'Confirmed'){
+    echo ($pay_bereavement_balance + $unpay_bereavement_balance).'(Bereavement) until '.$end_date;
+  }elseif ($status == 'Pending' && $list_selected == 'PENDING_LIST') {
+    echo ($pay_bereavement_balance + $unpay_bereavement_balance).'(Bereavement) <br> until '."<br>".$end_date."<br>".'<strong>Balance day are not deduct </strong>';
+    //echo ($pending_pay_bereavement_balance + $pending_unpay_bereavement_balance)-$bereavement_leave_offdaySumByUserId[$userid]."\n".'(Bereavement) until date: '.$end_date;
+  }else {
+    echo ($pay_bereavement_balance + $unpay_bereavement_balance).'(Bereavement) <br> until '."<br>".$end_date."<br>".'<strong>Balance day are not deduct </strong>';
+    //echo ($pay_bereavement_balance + $unpay_bereavement_balance)-$bereavement_leave_offdaySumByUserId[$userid]."\n".'(Bereavement) until date: '.$end_date;
+  }*/
+
+}
+
+if($type_of_leave=='PERSONAL_LEAVE' && $status != 'Cancelled' && $status != 'Rejected'){
+
+  //$pay_personal_balance =calculatePersonalLeaveBalance($requested_date=$end_date,$userid,PAID_LEAVE,'status ="Confirmed"');
+  //$unpay_personal_balance = calculatePersonalLeaveBalance($requested_date=$end_date,$userid,UNPAID_LEAVE,'status ="Confirmed" ');
+
+  //$pending_pay_personal_balance = calculatePersonalLeaveBalance_with_StatusSQL($requested_date=$end_date,$userid,PAID_LEAVE,'status ="Approved" OR status ="Confirmed"');
+  //$pending_unpay_personal_balance = calculatePersonalLeaveBalance_with_StatusSQL($requested_date=$end_date,$userid,UNPAID_LEAVE,'status ="Approved" OR status ="Confirmed"');
+
+  if($status == 'Confirmed'){
+
+
+    if($end_date_year == $current_year){
+      echo $display_balance_day.'(Personal) <br> until '.$end_date;
+    }
+
+
+  }else {
+
+    if(($pay_personal_balance + $unpay_personal_balance) - $number_of_day < 0){
+      echo '<img src="images/warning.png" alt="warning" title="Personal leave is not enough">'.($pay_personal_balance + $unpay_personal_balance).'(Personal) <br> until '.$end_date;
+    }else {
+      echo ($pay_personal_balance + $unpay_personal_balance).'(Personal) <br> until '.$end_date;
+    }
+
+
+  }
+
+
+  /*if($status == 'Confirmed'){
+    echo ($pay_personal_balance + $unpay_personal_balance)."\n".'(Personal) until date '.$end_date;
+
+  }elseif($status == 'Pending' && $list_selected == 'PENDING_LIST'){
+    echo ($pay_personal_balance + $unpay_personal_balance)."\n".'(Personal) <br> until date '."<br>".$end_date."<br>".'<strong>Balance day are not deduct </strong>';
+    //echo ($pending_pay_personal_balance + $pending_unpay_personal_balance)-$personal_leave_offdaySumByUserId[$userid]."\n".'(Personal) until date: '.$end_date;
+  }else {
+    echo ($pay_personal_balance + $unpay_personal_balance)."\n".'(Personal) <br> until date '."<br>".$end_date."<br>".'<strong>Balance day are not deduct </strong>';
+    //echo ($pay_personal_balance + $unpay_personal_balance)-$personal_leave_offdaySumByUserId[$userid]."\n".'(Personal) until date: '.$end_date;
+  }*/
+
+}
+//echo calculateMedicalLeaveBalance($requested_date=0,$userid);
+
+?>
+</td>
+<td><?php echo $company;  ?></td>
+
+
+
+<td><?php
+
+$selected_leave = $TYPE_OF_LEAVE[$type_of_leave];
+
+echo  str_replace('Leave', '' ,$selected_leave['display_title'] );  ?></td>
+
+<td><?php echo $create_date->format('Y-m-d H:i');?> </td>
+
+<td>
+  <!--  <a id="claim_note_page" href="claim_note.php?leave_record_id=<?php echo $leave_record_id; ?>">view</a>
+  <button class="view_button" type="button" data-claimid="<?php echo $leave_record_id; ?>" alt="view <?php echo $username; ?> detail " title="View <?php echo $username; ?> detail" ><img src="images/zoom-in.svg" border="0" alt="view <?php echo $username; ?> detail" title="view <?php echo $username; ?> detail" ></button>
+-->
+
+<a  style="cursor: pointer;" class="view_button" data-claimid="<?php echo $leave_record_id; ?>"  ><img src="images/zoom-in.svg" border="0" alt="view <?php echo $username; ?> detail" title="view <?php echo $username; ?> detail" ></a>
+
+</td>
+
+
+<td><?php
+echo $comment."<br>";
+
+if($approve_note != ""){
+  echo "Approved remark:".nl2br($approve_note);
+}
+
+if($reject_note !=""){
+  echo "Reject remark:".nl2br($reject_note);
+}
+if($cancel_note != ""){
+  echo "Cancel remark:".nl2br($cancel_note);
+}
+
+?></td>
+
+
+
+<td>
+  <?php
+  if($regular_day_off ==""){
+    //$regular_day_off="Saturday,Sunday";
+    //echo $regular_day_off;
+  }else {
+    echo str_replace(',', '<br>', $regular_day_off);
+  }
+
+  ?>
+</td>
+
+<td>
+  <?php
+  if($type_of_leave != 'ANNUAL'){
+    $leave_paid_message = [];
+
+    foreach($paid_result as $key => $value){
+      $leave_dates=$value['leave_date'];
+      $is_paid_leave =$value['is_paid_leave'];
+
+      if($is_paid_leave == 'Y'){
+        $message = '[Paid]';
+      }else {
+        $message = '<span style="color: red;">[UnPaid]</span>';
+      }
+     $leave_paid_message[]  = $leave_dates.' '.$message;
+
+
+    }
+    echo implode(', ', $leave_paid_message);
+
+  }
+
+
+
+
+
+   ?>
+</td>
+</tr>
+</form>
+
+<?php }} ?>
+
+
+
+
+</tbody>
+
+
+
+
+</table>
+
+
+
+
+
+
+
+
+<?php } ?>
+
+
+
+
+</div>
+
+
+<div class="modal fade" id="view_modal" >
+  <div class="modal-dialog" style="max-width: 50vw;">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Details</h5>
+        <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      <div class="modal-body" style="width:100%;">
+
+
+
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary close" data-dismiss="modal">Close</button>
+
+      </div>
+
+    </div>
+
+  </div>
+
+</div>
+
+
+
+<?php include 'footer.php'; ?>
+
+
+
+
+<script type="text/javascript">
+
+function submitForm(){
+  document.forms[0].submit();
+}
+
+
+$(document).ready(function () {
+
+  <?php
+  if(isset($_SESSION['cancel'])&& $_SESSION['cancel']='cancel_success'){
+    ?>
+
+    var msg = "Application has cancelled.";
+    message(msg);
+
+
+    <?php
+    unset($_SESSION['cancel']);
+  } ?>
+
+
+  <?php
+  if(isset($_SESSION['reject']) && $_SESSION['reject']='reject_success'){
+    ?>
+
+    var msg="Application has rejected.";
+    message(msg);
+
+    <?php
+    unset($_SESSION['reject']);
+  }
+
+  ?>
+
+
+  <?php
+  if(isset($_SESSION['approve']) && $_SESSION['approve'] = 'approve_success'){
+
+    ?>
+    var msg="Application has approved.";
+    message(msg);
+
+
+    <?php
+    unset($_SESSION['approve']);
+  }
+  ?>
+
+  <?php
+  if(isset($_SESSION['confirm']) && $_SESSION['confirm'] = 'confirm_success'){
+    ?>
+    var msg = "Application has confirmed.";
+    message(msg);
+
+
+    <?php
+    unset($_SESSION['confirm']);
+  }
+  ?>
+
+  var view_modal = new bootstrap.Modal(document.getElementById('view_modal'), {});
+
+  $(document).on('click', '.view_button', function() {
+    var claimid = $(this).data('claimid');
+    //alert(claimid);
+    //var userid = $(this).data('id');
+
+    // AJAX request
+    $.ajax({
+      url: 'claim_note.ajax.php',
+      type: 'post',
+      data: {claimid: claimid},
+      success: function(response){
+        // Add response in Modal body
+        $('.modal-body').html(response);
+
+        // Display Modal
+        $('#view_modal').modal('show');
+        view_modal.show();
+      }
+    });
+
+
+
+
+
+
+  });
+
+  $('#view_modal .close').click(function() {
+
+    view_modal.hide();
+  });
+
+
+
+
+
+  $(document).on('click', '#claim_note_page', function(){
+
+    var currentURL = window.location.href;
+    localStorage.setItem('lastURL',currentURL);
+    //window.location.href=''
+
+  });
+
+
+  /*$(document).on('click', '.cancel_button', function() {
+
+  var claim_id = $(this).data('claimid');
+  var id = $(this).data('id');
+  var firstname = $(this).data('firstname');
+
+
+
+
+  if(confirm("Are you sure you want to [cancel] this application?")){
+
+  $.ajax({
+  type: "POST",
+  url: "leave_record.ajax.php",
+  // cache:false,
+  //data: $('#myForm').serialize(),
+  data: { action : 'cancel' ,  claim_id: claim_id, id: id, firstname: firstname} ,
+  success:function(response){
+  console.log(response);
+
+  //alert('cancel success');
+  location.reload(true);
+
+},
+error: function(){
+alert("Error");
+}
+
+});
+}
+else{
+console.log('Cancellation canceled.');
+}
+});*/
+
+
+$(document).on('click', '.confirm_button', function() {
+
+  var claim_id = $(this).data('claimid');
+  var fullname=$(this).data('fullname');
+  var id = $(this).data('id');
+  var userid = $(this).data('userid');
+  var email = $(this).data('email');
+  var startdate = $(this).data('startdate');
+  var enddate = $(this).data('enddate');
+  var typeleave = $(this).data('typeleave');
+  var balanceday = $(this).data('balanceday');
+
+  if(confirm("Are you sure you want to [Confirm] this application?")){
+
+    $.ajax({
+      type: "POST",
+      url: "leave_record.ajax.php",
+      // cache:false,
+      //data: $('#myForm').serialize(),
+      data: { action : 'confirm' ,  claim_id: claim_id, fullname:fullname, id:id,email:email, startdate:startdate, enddate:enddate,userid:userid, typeleave:typeleave, balanceday:balanceday } ,
+      success:function(response){
+        console.log(response);
+
+        /*var msg = "Form submitted successfully!";
+        message(msg);*/
+
+        // Reload the page after a delay (if needed)
+        //setTimeout(function() {
+        location.reload(true);
+        //}, 2000);
+
+      },
+      error: function(){
+        alert("Error");
+      }
+
+    });
+  }
+  else{
+    console.log('Cancellation canceled.');
+  }
+});
+
+
+
+
+
+/*$(document).on('click', '.approve_button', function() {
+
+  var claim_id = $(this).data('claimid');
+  var fullname=$(this).data('fullname');
+  var id = $(this).data('id');
+  var email = $(this).data('email');
+
+
+  if(confirm("Are you sure you want to [Approve] this application?")){
+
+    $.ajax({
+      type: "POST",
+      url: "leave_record.ajax.php",
+      // cache:false,
+      //data: $('#myForm').serialize(),
+      data: { action : 'approve' ,  claim_id: claim_id, fullname:fullname, id:id,email:email} ,
+      success:function(response){
+        console.log(response);
+
+
+        location.reload(true);
+
+
+      },
+      error: function(){
+        alert("Error");
+      }
+
+    });
+  }
+  else{
+    console.log('Cancellation canceled.');
+  }
+});*/
+
+
+var approve_note = new bootstrap.Modal(document.getElementById('approve_note'), {});
+
+$(document).on('click', '.approve_button', function() {
+  var claim_id = $(this).data('claimid');
+  console.log(claim_id);
+
+  $(".modal-body #claim_id").val(claim_id);
+  $(".modal-body .claim_id").text(claim_id);
+  approve_note.show();
+});
+
+
+$('#approve_note .close').click(function() {
+  approve_note.hide();
+});
+
+
+$('.approve-submit-btn').click(function(e) {
+  e.preventDefault();
+  // Get the claim ID from the modal body
+  //console.log($('#myForm').serialize())  ;
+  var claim_id = $(".modal-body #claim_id").val();
+  var fullname = $(this).data('fullname');
+  var id = $(this).data('id');
+  var email = $(this).data('email');
+
+  $.ajax({
+    type: "POST",
+    url: "leave_record.ajax.php",
+    // cache:false,
+    //data: $('#myForm').serialize(),
+    data: { action : 'approve' ,  claim_id: claim_id, approve_comment: $("#approve_comment").val(), fullname:fullname, id:id, email:email } ,
+    success: function(response){
+      response=JSON.parse(response);
+
+      var msg = "Form approved successfully!";
+      message(msg);
+      //	alert(response['comment']);
+      location.reload(true);
+
+    },
+    error: function(){
+      alert("Error");
+    }
+  });
+
+
+});
+
+
+
+
+var table = $('#formtable').DataTable({
+  "processing": true, // Enable processing indicator
+
+  "bLengthChange": false,
+  "bFilter": true,
+  "Info": true,
+  "ordering":<?php echo ($role_p!='admin') ? 'true' : 'false';  ?>,
+  "order": [[3, 'desc']],
+  "stateSave": true,
+  "scrollX": true,
+
+  "scrollCollapse": true,
+  //"scrollY": '50vh',
+  "columnDefs": [
+    {
+      className: 'dtr-control',
+      orderable: false,
+      targets: 0
+    },
+    {
+      width: 50,
+      orderable: false,
+      targets: 1
+    }
+  ],
+  "responsive": {
+    details: {
+      type: 'column'
+    }
+  }
+
+
+});
+
+
+
+var cancel_note = new bootstrap.Modal(document.getElementById('cancel_note'), {});
+
+$(document).on('click', '.cancel_button', function() {
+  var claim_id = $(this).data('claimid');
+  console.log(claim_id);
+
+  $(".modal-body #claim_id").val(claim_id);
+  $(".modal-body .claim_id").text(claim_id);
+  cancel_note.show();
+});
+
+
+$('#cancel_note .close').click(function() {
+  cancel_note.hide();
+});
+
+
+$('.cancel-submit-btn').click(function(e) {
+  e.preventDefault();
+  // Get the claim ID from the modal body
+  //console.log($('#myForm').serialize())  ;
+  var claim_id = $(".modal-body #claim_id").val();
+  var fullname = $(this).data('fullname');
+  var id = $(this).data('id');
+  var email = $(this).data('email');
+
+  $.ajax({
+    type: "POST",
+    url: "leave_record.ajax.php",
+    // cache:false,
+    //data: $('#myForm').serialize(),
+    data: { action : 'cancel_form' ,  claim_id: claim_id, cancel_comment: $("#cancel_comment").val(), fullname:fullname, id:id, email:email } ,
+    success: function(response){
+      response=JSON.parse(response);
+
+      var msg = "Form cancelled successfully!";
+      message(msg);
+      //	alert(response['comment']);
+      location.reload(true);
+
+    },
+    error: function(){
+      alert("Error");
+    }
+  });
+
+
+});
+
+
+
+
+var reject_note = new bootstrap.Modal(document.getElementById('reject_note'), {});
+
+$(document).on('click', '.reject_button', function() {
+  var claim_id = $(this).data('claimid');
+  console.log(claim_id);
+
+  $(".modal-body #claim_id").val(claim_id);
+  $(".modal-body .claim_id").text(claim_id);
+  reject_note.show();
+});
+
+
+$('#reject_note .close').click(function() {
+  reject_note.hide();
+});
+
+/*$('#reject_note .reject-submit-btn').click(function() {
+//reject_note.hide();
+location.reload();
+});*/
+
+
+$('.reject-submit-btn').click(function(e) {
+  e.preventDefault();
+  // Get the claim ID from the modal body
+  //console.log($('#myForm').serialize())  ;
+  var claim_id = $(".modal-body #claim_id").val();
+  var fullname = $(this).data('fullname');
+  var id = $(this).data('id');
+  var email = $(this).data('email');
+
+
+  $.ajax({
+    type: "POST",
+    url: "leave_record.ajax.php",
+    // cache:false,
+    //data: $('#myForm').serialize(),
+    data: { action : 'reject_form' ,  claim_id: claim_id, claim_comment: $("#reject_comment").val(), fullname:fullname, id:id, email:email } ,
+    success: function(response){
+      response=JSON.parse(response);
+      //	alert(response['comment']);
+      location.reload(true);
+
+    },
+    error: function(){
+      alert("Error");
+    }
+  });
+
+
+});
+
+
+
+
+
+
+
+
+
+});
+
+
+/*function formatChildRow(cell) {
+var name = $(cell).closest('tr').find('td:nth-child(2)').text();
+var html = '<div style="padding: 10px;">';
+html += '<strong>Name:</strong> ' + comment + '<br>';
+html += 'Additional information about ' + comment;
+html += '</div>';
+return html;
+}*/
+
+
+
+
+
+</script>

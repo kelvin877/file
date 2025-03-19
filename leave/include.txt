@@ -1,0 +1,75 @@
+<?php
+if (!session_id())
+	session_start();
+
+//if (strpos(getEnv("SCRIPT_NAME"),'product_detail.php') !== false) {
+	ini_set('memory_limit','30M');
+	set_time_limit(3600);
+	//echo ini_get('memory_limit');
+	//echo ini_get('max_execution_time');
+//}
+
+
+ini_set('display_errors', 1);
+ini_set('display_startup_errors', 1);
+error_reporting(E_ALL);
+
+date_default_timezone_set('America/Vancouver');
+
+
+// Set the session timeout duration in seconds
+$sessionTimeout = 1800; // 30 minutes
+
+// Check if the session has already been started and calculate the time since the last activity
+if (isset($_SESSION['LAST_ACTIVITY'])) {
+    $lastActivity = $_SESSION['LAST_ACTIVITY'];
+    $currentTime = time();
+    $timeSinceLastActivity = $currentTime - $lastActivity;
+
+    // Check if the session has exceeded the timeout duration
+    if ($timeSinceLastActivity > $sessionTimeout) {
+        // Session expired, destroy the session
+        session_unset();
+        session_destroy();
+        echo "Session expired. Please log in again.";
+		header('Location: login.php');
+    } else {
+        // Update the last activity time
+        $_SESSION['LAST_ACTIVITY'] = $currentTime;
+      //  echo "Session active.";
+    }
+} else {
+    // Set the last activity time for the session
+    $_SESSION['LAST_ACTIVITY'] = time();
+    //echo "Session started.";
+}
+
+
+
+
+
+
+defined('DOCUMENT_ROOT') or define("DOCUMENT_ROOT", getEnv("DOCUMENT_ROOT") .'/leave' );
+defined('PHP_LIB') or define("PHP_LIB", DOCUMENT_ROOT . "/php-lib");
+
+require_once(PHP_LIB . "/config.php");
+require_once(PHP_LIB . "/DatabaseClass.php");
+
+require_once(PHP_LIB . "/tool.php");
+
+require_once(PHP_LIB . "/site_functions.php");
+require_once(PHP_LIB . "/calculation.php");
+
+/*if (strpos(getEnv("SCRIPT_NAME") , "login.php") === false && !isset($_SESSION[LIVE_DOMAIN.'_admin_session'])) {
+	redir("index.php");
+	exit;
+}*/
+
+require_once(PHP_LIB . "/public.php");
+
+//require_once('lib.php');
+
+//include_once(DOCUMENT_ROOT. '/manager/admin_zone.php');
+
+
+defined('ADMIN_AUTH_ERROR_PAGE') or  define("ADMIN_AUTH_ERROR_PAGE", "auth.php");

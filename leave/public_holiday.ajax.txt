@@ -1,0 +1,29 @@
+<?php
+include_once 'include.php';
+
+
+$hdb = getConnection();
+
+$response = '';
+
+$datetime = date('Y-m-d H:i:s');
+
+
+if(isset($_POST['action']) && $_POST['action'] == 'delete'){
+
+  $holiday_id =$_POST['holiday_id'];
+
+  $sql="Update public_holidays set is_delete='Y',deleted_at=:datetime where id=:holiday_id";
+
+  $parameters=array('datetime'=>$datetime,'holiday_id'=>$holiday_id);
+
+  $hdb->query($sql,$parameters);
+
+  $response = array('success'=>true);
+
+  echo json_encode($response);
+
+}
+
+
+ ?>

@@ -1,0 +1,69 @@
+<?php
+include_once 'include.php';
+
+$hdb = getConnection();
+
+//if(isset($_POST['claimid'])){
+$leave_record_id=$_POST['claimid'];
+
+$sql ="Select * from claim_notes where leave_record_id=:leave_record_id ORDER BY created_at desc";
+
+$parameters=array('leave_record_id'=>$leave_record_id);
+
+
+$result=$hdb->query($sql,$parameters);
+
+
+if(count($result)>0){
+
+  $response = "<table class='table table-striped' style='width:100%'>";
+  $response .= "<thead>";
+  $response .= "<tr>";
+  $response .= "<th></th>";
+  $response .= "<th>Created By</th>";
+  $response .= "<th>Created At</th>";
+  $response .= "</tr>";
+  $response .= "</thead>";
+
+  $response .= "<tbody>";
+
+
+  foreach($result as $value => $label){
+    $notes = $label['notes'];
+    $added_by = $label['added_by'];
+    $created_at = $label['created_at'];
+    $note_type = $label['note_type'];
+
+
+    $response .= "<tr>";
+    $response .= "<td>$notes </td>";
+    $response .= "<td>$added_by </td>";
+    $response .= "<td>$created_at </td>";
+
+    $response .= "</tr>";
+
+
+
+
+
+  }
+  $response .= "</tbody>";
+  $response .= "</table>";
+  echo $response;
+  exit;
+}else {
+  $response = "N/A";
+  echo $response;
+}
+
+
+//}
+
+
+
+
+
+
+
+
+?>

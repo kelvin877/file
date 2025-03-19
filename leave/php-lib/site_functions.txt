@@ -1,0 +1,1059 @@
+<?php
+
+function processLeave($data, $sql, $leave_type) {
+  global $this_year_startdate, $this_year_enddate, $this_year_default_off_date_array, $leave_type, $create_date, $id, $excludedDateArray, $leave_record_id, $single_day_dropdown,$email,$role,$firstname;
+  global $next_year_startdate,$next_year_enddate,$next_year_default_off_date_array;
+  global $firstCompany,$company_name;
+    $hdb = getConnection();
+
+    $prev_insert_id = '';
+
+
+    foreach ($data as $item) {
+        list($startdate, $enddate, $days, $leave_type, $fullname, $create_date, $comment, $regular_day_off) = $item;
+
+        $parameters = array('startdate' => $startdate, 'enddate' => $enddate, 'id' => $id, 'leavetype' => $leave_type, 'days' => $days, 'username' => $fullname, 'create_date' => $create_date, 'comment' => $comment, 'regular_day_off' => $regular_day_off
+          ,'company_id'=>$firstCompany, 'company_name' => $company_name );
+        $hdb->query($sql, $parameters);
+
+        $leave_record_id = $hdb->lastInsertId();
+
+
+        if($prev_insert_id != $leave_record_id){
+          $this_year_insert_id = $prev_insert_id;
+
+        }else {
+          $leave_record_id = $hdb->lastInsertId();
+        }
+
+
+        $prev_insert_id = $leave_record_id;
+    }
+    //send this year leave
+    send_email($this_year_insert_id, 'create', $email, '', $role);
+    claim_item($this_year_insert_id, 'create', $id, $firstname);
+
+    //send next year leave
+    send_email($leave_record_id, 'create', $email, '', $role);
+    claim_item($leave_record_id, 'create', $id, $firstname);
+
+
+
+    insertLeaveDetail($this_year_startdate, $this_year_enddate, $this_year_default_off_date_array, $leave_type, $create_date, $id, $excludedDateArray, $this_year_insert_id, $single_day_dropdown);
+    insertLeaveDetail($next_year_startdate, $next_year_enddate, $next_year_default_off_date_array, $leave_type, $create_date, $id, $excludedDateArray, $leave_record_id, $single_day_dropdown);
+
+    $_SESSION['submit'] = 'submit_success';
+    redir('user_profile.php');
+  }
+
+
+
+
+function generateRandomLightColor($id, $maxAttempts = 100) {
+    $attempts = 0;
+
+    do {
+        $color = generateRandomColor($id); // Generate a random color based on the hashed $id
+        $attempts++;
+
+        if ($attempts >= $maxAttempts) {
+            // Break out of the loop if attempts exceed the limit
+            break;
+        }
+    } while (calculateLuminance($color) > 0.5); // Check if the color is dark
+
+    return $color;
+}
+
+function generateRandomColor($id) {
+		srand($id);
+
+		$red = mt_rand(50, 200);
+    $green = mt_rand(50, 200);
+    $blue = mt_rand(50, 200);
+
+		srand();
+
+		return sprintf("#%02X%02X%02X", $red, $green, $blue); // Generate a random color based on the hashed $id
+}
+
+
+function calculateLuminance($color) {
+		// Convert hex to RGB
+		$r = hexdec(substr($color, 1, 2));
+		$g = hexdec(substr($color, 3, 2));
+		$b = hexdec(substr($color, 5, 2));
+
+		// Calculate luminance using the relative luminance formula
+		return (0.299 * $r + 0.587 * $g + 0.114 * $b) / 5;
+}
+
+function displayStatus($status){
+	 if ($status == 'Pending'){
+            echo '<span class="badge bg-info">PENDING</span>';
+          }elseif ($status == 'Confirmed'){
+            echo '<span class="badge bg-primary">CONFIRMED</span>';
+          }elseif ($status == 'Approved'){
+              echo '<span class="badge bg-success">APPROVED</span>';
+          }elseif ($status == 'Cancelled'){
+              echo '<span class="badge bg-secondary">CANCELLED</span>';
+          }elseif ($status == 'Rejected'){
+              echo '<span class="badge bg-secondary">REJECTED</span>';
+          }
+
+}
+
+
+/// check if it is a leap year
+function isLeapYear($year){
+
+	 return ((($year % 4) == 0) && ((($year % 100) != 0) || (($year %400) == 0)));
+}
+
+
+
+
+function insertLeaveDetail($startdate,$enddate,$off_date,$leave_type,$create_date,$id,$excludedDateArray,$leave_record_id,$single_day_dropdown){
+	$hdb = getConnection();
+
+  global $SICK_LEAVE_ENTITLEMENT,$PERSONAL_LEAVE_ANNUAL_ENTITLEMENT,$BEREAVEMENT_LEAVE_ANNUAL_ENTITLEMENT;
+
+
+	$startdate_time=strtotime($startdate);
+	$enddate_time=strtotime($enddate);
+	$current_timestamp = $startdate_time;
+	$number_of_day=1;
+	$iteration = 0;
+  $full_day = true;
+
+
+	$days_difference = ceil(($enddate_time - $startdate_time) / (60 * 60 * 24));
+
+	if($single_day_dropdown =='morning' || $single_day_dropdown == 'afternoon'){
+		$number_of_day = 0.5;
+    $full_day = false;
+	}else {
+		$number_of_day = 1;
+    $full_day = true;
+	}
+
+  $incorporation_type_sql = "select incorporation_type from user as u left join company as c on u.company = c.id where u.id='$id' ";
+  $incorporation_result = $hdb->query($incorporation_type_sql);
+  if(count($incorporation_result) > 0){
+    $value =$incorporation_result[0];
+    $incorporation_type = $value['incorporation_type'];
+
+  }
+
+    /*if(!isNextYear($startdate) && isNextYear($enddate)){
+
+      echo 'hello';
+
+
+    }else {*/
+
+      $startdateYear=date("Y", strtotime($startdate));
+
+      //Get total of number of
+      //if($leave_type != 'ANNUAL'){
+        $sql = "select * from leave_detail where type_of_leave ='$leave_type' and status != 'Cancelled' and user_id='$id' and is_paid_leave='Y' and leave_date like '$startdateYear-%' order by id ";
+        $result = $hdb->query($sql);
+      //}
+      //print_r($result);
+
+      //insert_pay_or_unpay($leave_type,$incorporation_type,$current_timestamp ,$enddate_time,$sql,$excludedDateArray,$off_date,$startdate,$enddate,$number_of_day);
+
+    //}
+
+
+    $number_of_days_in_result=0;
+    if(count($result) > 0){
+      foreach ($result as $row) {
+              $number_of_days_in_result += $row['number_of_day'];
+              //echo $row['number_of_day'];
+          }
+    }else {
+      $number_of_days_in_result = 0;
+    }
+
+    //echo $number_of_days_in_result;
+	while($current_timestamp <= $enddate_time){
+
+    $insert_sql = "INSERT INTO leave_detail
+        SET leave_date=:leave_date, leave_start_date=:leave_start_date, leave_end_date=:leave_end_date, created_at=:create_date,
+        user_id=:user_id, leave_record_id=:claim_id, created_by=:created_by, number_of_day=:number_of_day,
+        status='Pending', type_of_leave=:type_of_leave, is_paid_leave=:is_paid_leave ";
+
+		switch($leave_type){
+			case 'SICK_LEAVE':
+
+        $number_of_days_in_result = 0;
+
+        foreach ($result as $row) {
+                $number_of_days_in_result += $row['number_of_day'];
+            }
+        $leave_date = date('Y-m-d',$current_timestamp);
+
+
+        if($incorporation_type =='bc'){
+          $max_day = 4.5;
+        }
+        elseif ($incorporation_type == 'federal') {
+          $max_day = 9.5;
+        }
+
+        //Detect it is BC
+        //if($incorporation_type =='bc'){
+          if ($iteration + $number_of_days_in_result <= $SICK_LEAVE_ENTITLEMENT[strtoupper($incorporation_type)]['PAID'] && $iteration + $number_of_days_in_result == $max_day) {
+
+  			    if (!in_array($leave_date, $excludedDateArray) && !in_array($leave_date, $off_date)) {
+
+              if($full_day){
+                $insert_parameters = array('leave_date' => $leave_date, 'leave_start_date' => $startdate, 'leave_end_date' => $enddate, 'create_date' => $create_date, 'user_id' => $id,
+                    'claim_id' => $leave_record_id, 'created_by' => $id, 'number_of_day' => 0.5, 'type_of_leave' => $leave_type, 'is_paid_leave' => 'Y');
+                $hdb->query($insert_sql, $insert_parameters);
+
+                $insert_parameters['number_of_day'] = 0.5;
+                $insert_parameters['is_paid_leave'] = 'N';
+                $hdb->query($insert_sql, $insert_parameters);
+              //}
+
+                $iteration++;
+              }else {
+                $insert_parameters = array('leave_date' => $leave_date, 'leave_start_date' => $startdate, 'leave_end_date' => $enddate, 'create_date' => $create_date, 'user_id' => $id,
+                    'claim_id' => $leave_record_id, 'created_by' => $id, 'number_of_day' => 0.5, 'type_of_leave' => $leave_type, 'is_paid_leave' => 'Y');
+                $hdb->query($insert_sql, $insert_parameters);
+
+
+              }
+
+  			    }
+  			}else {
+                $is_paid_leave = 'Y';
+                if($iteration + $number_of_days_in_result >= $SICK_LEAVE_ENTITLEMENT[strtoupper($incorporation_type)]['PAID']) {
+                  $is_paid_leave = 'N';
+
+                }
+                if (!in_array($leave_date, $excludedDateArray) && !in_array($leave_date, $off_date)) {
+
+                  $insert_parameters = array('leave_date' => $leave_date, 'leave_start_date' => $startdate, 'leave_end_date' => $enddate, 'create_date' => $create_date, 'user_id' => $id,
+                  'claim_id' => $leave_record_id, 'created_by' => $id, 'number_of_day' => $number_of_day , 'type_of_leave' => $leave_type, 'is_paid_leave' => $is_paid_leave);
+                  $hdb->query($insert_sql, $insert_parameters);
+
+                  $iteration++;
+                }
+  					}
+        //}
+			break;
+			case 'ANNUAL':
+			$is_paid_leave = 'Y';
+			break;
+			case 'PERSONAL_LEAVE':
+
+        if ($incorporation_type == 'federal') {
+          $max_day = 2.5;
+        }
+
+        //echo $number_of_days_in_result;
+
+				$leave_date = date('Y-m-d',$current_timestamp);
+
+
+				//if ($iteration + $number_of_days_in_result <= PAID_PERSONAL_LEAVE_ANNUAL_ENTITLEMENT && $iteration + $number_of_days_in_result == 2.5) {
+
+        //if ($iteration + $number_of_days_in_result <= $PERSONAL_LEAVE_ANNUAL_ENTITLEMENT[strtoupper($incorporation_type)]['PAID'] && $iteration + $number_of_days_in_result == $max_day) {
+        if ($iteration + $number_of_days_in_result < $PERSONAL_LEAVE_ANNUAL_ENTITLEMENT[strtoupper($incorporation_type)]['PAID'] && $iteration + $number_of_days_in_result == $max_day) {
+
+			    if (!in_array($leave_date, $excludedDateArray) && !in_array($leave_date, $off_date)) {
+            //if($single_day_dropdown !='morning' || $single_day_dropdown !='afternoon'){
+
+              if($full_day){
+                $insert_parameters = array('leave_date' => $leave_date, 'leave_start_date' => $startdate, 'leave_end_date' => $enddate, 'create_date' => $create_date, 'user_id' => $id,
+                    'claim_id' => $leave_record_id, 'created_by' => $id, 'number_of_day' => 0.5, 'type_of_leave' => $leave_type, 'is_paid_leave' => 'Y');
+                $hdb->query($insert_sql, $insert_parameters);
+
+
+                $insert_parameters['number_of_day'] = 0.5;
+                $insert_parameters['is_paid_leave'] = 'N';
+                $hdb->query($insert_sql, $insert_parameters);
+              //}
+
+                $iteration++;
+              }else {
+                $insert_parameters = array('leave_date' => $leave_date, 'leave_start_date' => $startdate, 'leave_end_date' => $enddate, 'create_date' => $create_date, 'user_id' => $id,
+                    'claim_id' => $leave_record_id, 'created_by' => $id, 'number_of_day' => 0.5, 'type_of_leave' => $leave_type, 'is_paid_leave' => 'Y');
+                $hdb->query($insert_sql, $insert_parameters);
+
+
+              }
+
+			    }
+			}
+else {
+					//if($iteration + $number_of_days_in_result >= PAID_PERSONAL_LEAVE_ANNUAL_ENTITLEMENT) {
+          if($iteration + $number_of_days_in_result >= $PERSONAL_LEAVE_ANNUAL_ENTITLEMENT[strtoupper($incorporation_type)]['PAID']) {
+						$is_paid_leave = 'N';
+
+  				}else {
+  					$is_paid_leave = 'Y';
+
+  				}
+
+				    if (!in_array($leave_date, $excludedDateArray) && !in_array($leave_date, $off_date)) {
+
+
+				        $insert_parameters = array('leave_date' => $leave_date, 'leave_start_date' => $startdate, 'leave_end_date' => $enddate, 'create_date' => $create_date, 'user_id' => $id,
+				            'claim_id' => $leave_record_id, 'created_by' => $id, 'number_of_day' => $number_of_day , 'type_of_leave' => $leave_type, 'is_paid_leave' => $is_paid_leave);
+				        $hdb->query($insert_sql, $insert_parameters);
+
+				        $iteration++;
+				    }
+
+      }
+      //echo $number_of_days_in_result;
+
+			break;
+
+			case 'BEREAVEMENT_LEAVE':
+			$number_of_days_in_result = 0;
+
+
+			foreach ($result as $row) {
+							$number_of_days_in_result += $row['number_of_day'];
+					}
+			$leave_date = date('Y-m-d',$current_timestamp);
+			//if ($iteration + $number_of_days_in_result <= PAID_PERSONAL_LEAVE_ANNUAL_ENTITLEMENT &&  $iteration + $number_of_days_in_result >= 2.5) {
+			if ($iteration + $number_of_days_in_result <= $BEREAVEMENT_LEAVE_ANNUAL_ENTITLEMENT[strtoupper($incorporation_type)]['PAID'] && $iteration + $number_of_days_in_result == 2.5) {
+	// Insert the first record with 0.5 number_of_day and $is_paid_leave='N'
+				//$is_paid_leave = 'N';
+				//$number_of_day = 0.5;
+				if (!in_array($leave_date, $excludedDateArray) && !in_array($leave_date, $off_date)) {
+
+          if($full_day){
+            $insert_parameters = array('leave_date' => $leave_date, 'leave_start_date' => $startdate, 'leave_end_date' => $enddate, 'create_date' => $create_date, 'user_id' => $id,
+                'claim_id' => $leave_record_id, 'created_by' => $id, 'number_of_day' => 0.5, 'type_of_leave' => $leave_type, 'is_paid_leave' => 'Y');
+            $hdb->query($insert_sql, $insert_parameters);
+
+
+            $insert_parameters['number_of_day'] = 0.5;
+            $insert_parameters['is_paid_leave'] = 'N';
+            $hdb->query($insert_sql, $insert_parameters);
+          //}
+
+            $iteration++;
+          }else {
+            $insert_parameters = array('leave_date' => $leave_date, 'leave_start_date' => $startdate, 'leave_end_date' => $enddate, 'create_date' => $create_date, 'user_id' => $id,
+                'claim_id' => $leave_record_id, 'created_by' => $id, 'number_of_day' => 0.5, 'type_of_leave' => $leave_type, 'is_paid_leave' => 'Y');
+            $hdb->query($insert_sql, $insert_parameters);
+
+          }
+				}
+		}
+else {
+				if($iteration + $number_of_days_in_result >= $BEREAVEMENT_LEAVE_ANNUAL_ENTITLEMENT[strtoupper($incorporation_type)]['PAID']) {
+
+          $is_paid_leave = 'N';
+
+				//$number_of_day  = 1;
+			}else {
+				$is_paid_leave = 'Y';
+				//$number_of_day  = 1;
+			}
+
+					if (!in_array($leave_date, $excludedDateArray) && !in_array($leave_date, $off_date)) {
+
+
+
+							$insert_parameters = array('leave_date' => $leave_date, 'leave_start_date' => $startdate, 'leave_end_date' => $enddate, 'create_date' => $create_date, 'user_id' => $id,
+									'claim_id' => $leave_record_id, 'created_by' => $id, 'number_of_day' => $number_of_day , 'type_of_leave' => $leave_type, 'is_paid_leave' => $is_paid_leave);
+							$hdb->query($insert_sql, $insert_parameters);
+
+							$iteration++;
+					}
+				}
+			break;
+			default:
+			$is_paid_leave = 'N';
+			break;
+	}
+
+	//while($current_timestamp <= $enddate_time){
+			$leave_date = date('Y-m-d',$current_timestamp);
+			if(($leave_type != 'SICK_LEAVE' && $leave_type!=='BEREAVEMENT_LEAVE' && $leave_type !=='PERSONAL_LEAVE' )&& !in_array($leave_date,$excludedDateArray) && !in_array($leave_date,$off_date)){
+
+
+				$insert_parameters=array('leave_date'=>$leave_date,'leave_start_date'=>$startdate,'leave_end_date'=>$enddate,'create_date'=>$create_date,'user_id'=>$id
+				,'claim_id'=>$leave_record_id,'created_by'=>$id,'number_of_day'=>$number_of_day,'type_of_leave'=>$leave_type,'is_paid_leave'=>$is_paid_leave);
+
+				$hdb->query($insert_sql,$insert_parameters);
+
+				$iteration++;
+			}
+
+			$current_timestamp = strtotime('+1 day', $current_timestamp);
+
+	}
+
+
+
+}
+
+function get_leave_details($hdb,$leave_type,$id,$year){
+  $sql = "SELECT * FROM leave_detail
+            WHERE type_of_leave = '$leave_type'
+              AND status != 'Cancelled'
+              AND user_id = '$id'
+              AND leave_date LIKE '$year-%'
+            ORDER BY id";
+    return $hdb->query($sql);
+
+}
+
+
+
+function getExcludedDates(){
+	$hdb = getConnection();
+
+	$sql = "select date from public_holidays where is_delete ='N'";
+	$result =   $hdb->query($sql);
+	$excludedDateArray = array();
+	foreach ($result as $row) {
+		$excludedDateArray[] = $row['date'];
+	}
+	return $excludedDateArray;
+
+
+}
+
+
+
+
+
+
+function count_balance_day($user_id, $type_of_leave='',$pick_date=''){
+	$hdb = getConnection();
+
+	if($pick_date==''){
+		$sql_com='';
+	}else {
+		$sql_com="and start_date >=$pick_date";
+	}
+
+	$sql = "select COALESCE(SUM(number_of_day), 0) as total_day from leave_table where user_id=:id AND status='Pending' and type_of_leave='$type_of_leave' $sql_com ";
+
+	$params = array('id'=>$user_id);
+
+	$result = $hdb->query($sql,$params);
+
+
+
+	return $result[0]['total_day'];
+
+
+}
+
+
+
+
+/*****************************************************************/
+
+function isNextYear($date) {
+	$currentYear = date('Y');
+	$yearOfDate = date('Y', strtotime($date));
+
+	return $yearOfDate > $currentYear;
+}
+/*******************************************************************/
+function countDays($startdate, $enddate,$excludedDateArray, $single_day_dropdown,$numbers_day_off) {
+	$start = new DateTime($startdate);
+	$end = new DateTime($enddate);
+	$diff = $start->diff($end);
+	$days = $diff->days + 1;
+	$flag = false;// Initialize a flag variable
+	$off_date= array();
+	// Check if the start and end dates are the same day
+	$isSameDay = $start->format('Y-m-d') === $end->format('Y-m-d');
+
+	$excludeDays = 0;
+	$currentDate = $start;
+	while ($currentDate <= $end) {
+		$dayOfWeek = $currentDate->format('N'); // Get the day of the week (1 - Monday, 7 - Sunday)
+
+		$formattedDate = $currentDate->format('Y-m-d');
+
+		//echo $dayOfWeek;
+		//print_r($numbers_day_off);
+
+		if (in_array($dayOfWeek, $numbers_day_off) || in_array($formattedDate, $excludedDateArray) ) {
+			$off_date[] = $formattedDate;
+			$excludeDays++;
+		}else {
+			// Check if the user picked morning or afternoon and if it's the same day
+			if ($isSameDay && ($single_day_dropdown === 'morning' || $single_day_dropdown === 'afternoon')) {
+				//$days=0;
+				$excludeDays += 0.5;
+
+
+			}
+
+		}
+
+
+		$currentDate->add(new DateInterval('P1D')); // Move to the next day
+	}
+	$_SESSION['leave_default_off_date']=implode(',',$off_date);
+	//echo $_SESSION['leave_default_off_date'];
+	return $days - $excludeDays;
+}
+
+
+
+
+
+function claim_item($leave_record_id,$track_action,$id,$firstname){
+	//global $firstname;
+	//$firstname='Kelvin';
+	$date = date('Y-m-d H:i:s');
+
+	$hdb = getConnection();
+
+	$sql = "Insert into claim_notes set created_at=:created_at,added_by=:added_by,leave_record_id=:leave_record_id,added_by_id=:added_by_id,";
+
+	if($track_action=='create'){
+		$sql .="notes='Create a new PENDING record',note_type='Pending'";
+	}
+	elseif ($track_action=='Cancelled') {
+		$sql .="notes='Status change to CANCEL',note_type='Cancelled'";
+	}
+	elseif ($track_action=='Approved') {
+		$sql .="notes='Status change from PENDING to APPROVE',note_type='Approved'";
+	}
+	elseif ($track_action=='Rejected') {
+		$sql .="notes='Status change from PENDING to REJECT',note_type='Rejected'";
+	}elseif ($track_action=='Confirmed') {
+		$sql .="notes='Status change from APPROVE to CONFIRM',note_type='Confirmed'";
+	}
+
+
+	$parameters=array('created_at'=>$date,'added_by'=>$firstname,'leave_record_id'=>$leave_record_id, 'added_by_id'=>$id);
+
+	$hdb->query($sql,$parameters);
+
+}
+
+
+
+
+
+
+
+function track_annual_update($user_id,$annual_day,$updated_by,$first_name){
+
+	$date = date('Y-m-d H:i:s');
+
+	$hdb = getConnection();
+
+	$sqlCheckExistAnnual="Select * from custom_annual_leave where user_id=$user_id order by end_date asc limit 1";
+
+	$result=$hdb->query($sqlCheckExistAnnual);
+	if(count($result)>0){
+
+		$Check_annual_day=$result[0]['annual_day'];
+		$Check_end_date = $result[0]['end_date'];
+		$updated_date = $result[0]['updated_at'];
+		$updated_date = date("Y-m-d",strtotime($updated_date));
+		$id			= $result[0]['id'];
+
+		if($Check_annual_day!=$annual_day){
+			if($Check_end_date=='0000-00-00'){
+
+				if($updated_date != date('Y-m-d')){
+					$end_date = date('Y-m-d');
+					$end_date = date('Y-m-d' , strtotime('-1 day', strtotime($end_date)));
+
+					$start_date = date('Y-m-d');
+
+					$update_sql = "Update custom_annual_leave set end_date=:end_date ,updated_by_id=:updated_by_id,updated_at=:update_date,updated_by=:updated_by where user_id=:user_id and id=:id";
+
+					$update_parameters = array('user_id'=>$user_id,'updated_by'=>$first_name,'update_date'=>$date,'updated_by_id'=>$updated_by,'end_date'=>$end_date,'id'=>$id );
+
+					$hdb->query($update_sql,$update_parameters);
+
+					$sql="Insert Into custom_annual_leave set user_id=:user_id, annual_day=:annual_day, start_date=:start_date,end_date=:end_date ,updated_by_id=:updated_by_id, updated_at=:update_date, updated_by=:updated_by";
+
+					$parameters = array('user_id'=>$user_id,'annual_day'=>$annual_day, 'start_date'=>date('Y-m-d'),'end_date'=>'0000-00-00',
+					'updated_by_id'=>$updated_by,'update_date'=>$date ,'updated_by'=>$first_name);
+
+					$hdb->query($sql,$parameters);
+
+				}else {
+					$update_sql = "Update custom_annual_leave set end_date=:end_date ,updated_by_id=:updated_by_id,updated_at=:update_date,updated_by=:updated_by where user_id=:user_id and id=:id";
+
+					$update_parameters = array('user_id'=>$user_id,'updated_by'=>$first_name,'update_date'=>$date,'updated_by_id'=>$updated_by,'end_date'=>date('Y-m-d'), 'id'=>$id);
+
+					$hdb->query($update_sql,$update_parameters);
+
+					$sql="Insert Into custom_annual_leave set user_id=:user_id, annual_day=:annual_day, start_date=:start_date,end_date=:end_date ,updated_by_id=:updated_by_id, updated_at=:update_date, updated_by=:updated_by";
+
+					$parameters = array('user_id'=>$user_id,'annual_day'=>$annual_day, 'start_date'=>date('Y-m-d'),'end_date'=>'0000-00-00',
+					'updated_by_id'=>$updated_by,'update_date'=>$date ,'updated_by'=>$first_name);
+
+					$hdb->query($sql,$parameters);
+
+				}
+
+			}
+		}
+
+	}
+	else {
+		$end_date= '0000-00-00';
+
+		$sql="Insert Into custom_annual_leave set user_id=:user_id, annual_day=:annual_day, start_date=:start_date,end_date=:end_date ,updated_by_id=:updated_by_id, updated_at=:update_date, updated_by=:updated_by";
+
+		$parameters = array('user_id'=>$user_id,'annual_day'=>$annual_day, 'start_date'=>date('Y-m-d'),'end_date'=>$end_date,
+		'updated_by_id'=>$updated_by,'update_date'=>$date ,'updated_by'=>$first_name);
+
+		$hdb->query($sql,$parameters);
+	}
+}
+
+
+function send_email($reference,$action,$email,$claim_comment=null,$role=null,$resend=null){
+	global $TYPE_OF_LEAVE;
+
+	$message=file_get_contents('email_template.html');
+
+
+	$hdb = getConnection();
+	$id		 = $reference;
+	$message = str_replace('{{ID}}', $id, $message);
+
+
+	$Leave_detail_sql = "SELECT leave_table.*,leave_table.created_at AS leave_create,user.*,GROUP_CONCAT(DISTINCT c.company_name SEPARATOR ', ')
+	AS combined_company_names from user
+	LEFT JOIN company AS c ON FIND_IN_SET(c.id, user.company) > 0
+	left join leave_table on leave_table.user_id=user.id  where reference_id=:reference_id";
+
+
+	$parameters=array('reference_id'=>$reference);
+
+	$result=$hdb->query($Leave_detail_sql,$parameters);
+	//print_r($result);
+	//echo $hdb->odo_sql_debug($Leave_detail_sql,$parameters);
+
+	$leave_apply_username=$result[0]['user_name'];
+
+	$leave_apply_email=$result[0]['email'];
+
+	$leave_days=$result[0]['number_of_day'];
+
+	$combined_company_names=$result[0]['combined_company_names'];
+	$company =$result[0]['company'];
+
+	$start_date=$result[0]['start_date'];
+	$staff_apply_id	= $result[0]['staff_id'];
+
+	$comment = $result[0]['comment'];
+	$type_of_leave=$result[0]['type_of_leave'];
+	$reject_note=$result[0]['reject_note'];
+	$type_of_leave = $TYPE_OF_LEAVE[$type_of_leave];
+
+
+	if($comment==""){
+		$comment = "N/A";
+	}else {
+		$comment = nl2br($comment);
+	}
+
+	$company_array=explode(',',$company);
+
+	if(in_array('1',$company_array)){
+		$company_logo = 'logo_eseelynx.png';
+	}elseif (in_array('2',$company_array)) {
+		$company_logo = 'logo_sealandair_white.png';
+	}
+
+
+	$end_date=$result[0]['end_date'];
+
+	$leave_create =$result[0]['leave_create'];
+	$url = 'https://' . $_SERVER['SERVER_NAME'] . '/leave/leave_record.php?p=admin';
+
+	if($action=='create'){
+		if($role=='supervisor'){
+			$sql_check_role = "user.role = 'executive'";
+		}elseif ($role=='user') {
+			$sql_check_role = "user.role = 'supervisor'";
+		}
+
+		$companyArray=explode(',',$company);
+
+		foreach ($companyArray as $key => $companyid) {
+			// code...
+
+		//If user create a leave form send email to supervisor
+		$sql = "SELECT * FROM user WHERE $sql_check_role and is_delete='N'  AND FIND_IN_SET($companyid,company) > 0";
+
+		//$parameters=array('reference_id'=>$reference);
+
+		$result=$hdb->query($sql);
+		$status = 'Created';
+		foreach ($result as $key => $value) {
+
+			$recipient_name = 'Supervisor';
+			$recipient_email  = $value['email'];
+			//$url = 'https://' . (defined('LIVE_DOMAIN') ? LIVE_DOMAIN : 'hr.eseelynx.com') . '/leave/leave_record.php?p=admin';
+
+			$button = 'Approve/Reject';
+			$description = 'An application has been created.';
+
+
+			$subject = "Leave Request #".$reference."-".$leave_apply_username;
+
+
+			$message = str_replace('{{SITE_LOGO}}', $company_logo, $message);
+			$message = str_replace('{{RECEIPIENT_NAME}}', $recipient_name, $message);
+
+			$message = str_replace('{{DESCRIPTION}}', $description, $message);
+			$message = str_replace('{{NAME}}', $leave_apply_username, $message);
+			$message = str_replace('{{COMPANY}}', $combined_company_names, $message);
+			//$message = str_replace('{{COMPANY}}', $combined_company_names, $message);
+			$message = str_replace('{{EMPLOYEE_NO}}', $staff_apply_id,$message);
+			$message = str_replace('{{TYPE_OF_LEAVE}}', $type_of_leave['display_title'], $message);
+			$message = str_replace('{{DAY}}', $leave_days, $message);
+			$message = str_replace('{{STARTDATE}}', $start_date, $message);
+			$message = str_replace('{{ENDDATE}}', $end_date, $message);
+
+			$message = str_replace('{{COMMENT}}', $comment, $message);
+			$message = str_replace('{{APPLYDATE}}', $leave_create, $message);
+			$message = str_replace('{{URL}}', $url, $message);
+			$message = str_replace('{{BUTTON_NAME}}', $button, $message);
+
+			$headers[] = 'MIME-Version: 1.0';
+			$headers[] = 'Content-type: text/html; charset=iso-8859-1';
+			$headers[] = "From: $email ";
+			//$headers[] = "BCC: mandysin@eseelynx.com ";
+			//$headers[] = "Bcc: mrkelvinling@hotmail.com";
+
+
+			mail($recipient_email,$subject,$message,implode("\r\n", $headers));
+			}
+		}
+	}
+	if($action=='Approved'){
+		//$sql = "SELECT DISTINCT user.* FROM leave_table INNER JOIN user ON leave_table.user_id = user.id  WHERE role='admin' and company IN($company)";
+		//$sql ="SELECT * from user where role ='admin' and is_delete='N' and company IN($company)";
+
+		$companyArray=explode(',',$company);
+
+		foreach ($companyArray as $key => $companyid) {
+
+		$sql = "SELECT * FROM user WHERE role ='admin' and is_delete='N'  AND FIND_IN_SET($companyid,company) > 0";
+
+		$result=$hdb->query($sql);
+
+		$description = 'An application has been approved.';
+		$button = 'Confirm';
+		//$url = 'https://hr.eseelynx.com/leave/leave_record.php?p=admin';
+
+		foreach ($result as $key => $value) {
+			$recipient_name = 'Admin';
+			$recipient_email = $value['email'];
+
+
+
+			$subject = "[Approved] Leave Application #".$reference."-".$leave_apply_username;
+      if($resend == 'resent'){
+        $subject .= " (RESENT)";
+      }
+
+			$message = str_replace('{{SITE_LOGO}}', $company_logo, $message);
+			$message = str_replace('{{RECEIPIENT_NAME}}', $recipient_name, $message);
+
+			$message = str_replace('{{DESCRIPTION}}', $description, $message);
+
+			$message = str_replace('{{NAME}}', $leave_apply_username, $message);
+			$message = str_replace('{{COMPANY}}', $combined_company_names, $message);
+
+			$message = str_replace('{{EMPLOYEE_NO}}', $staff_apply_id, $message);
+
+			$message = str_replace('{{TYPE_OF_LEAVE}}', $type_of_leave['display_title'], $message);
+			$message = str_replace('{{DAY}}', $leave_days, $message);
+			$message = str_replace('{{STARTDATE}}', $start_date, $message);
+			$message = str_replace('{{ENDDATE}}', $end_date, $message);
+
+			$message = str_replace('{{COMMENT}}', $comment, $message);
+
+			$message = str_replace('{{APPLYDATE}}', $leave_create, $message);
+			$message = str_replace('{{URL}}', $url, $message);
+			$message = str_replace('{{BUTTON_NAME}}', $button, $message);
+
+			$headers[] = 'MIME-Version: 1.0';
+			$headers[] = 'Content-type: text/html; charset=iso-8859-1';
+			$headers[] = "From: $email";
+			$headers[] = "BCC: mandysin@eseelynx.com ";
+			//$headers[] = "Cc: kelvinling@eseelynx.com";
+
+			mail($recipient_email,$subject,$message,implode("\r\n", $headers));
+
+			}
+		}
+
+	}
+
+	if($action=='Confirmed'){
+		//$sql = "Select * from user left join leave_table on leave_table.user_id=user.id where reference_id=:reference_id";
+		//$result=$hdb->query($sql);
+		/*$recipient_name=$result[0]['first_name'];
+		$recipient_email=$result[0]['email'];*/
+		$subject = "[Confirmed] Leave Application #".$reference."-".$leave_apply_username;
+
+		$description = 'Your application has been confirmed.';
+		$button = 'View more details';
+		//$url = 'https://hr.eseelynx.com/leave/leave_record.php';
+
+
+		$message = str_replace('{{SITE_LOGO}}', $company_logo, $message);
+		$message = str_replace('{{RECEIPIENT_NAME}}', $leave_apply_username, $message);
+
+
+		$message = str_replace('{{DESCRIPTION}}', $description, $message);
+
+		$message = str_replace('{{NAME}}', $leave_apply_username, $message);
+
+		$message = str_replace('{{COMPANY}}', $combined_company_names, $message);
+
+		$message = str_replace('{{EMPLOYEE_NO}}', $staff_apply_id, $message);
+
+		$message = str_replace('{{TYPE_OF_LEAVE}}', $type_of_leave['display_title'], $message);
+
+		$message = str_replace('{{DAY}}', $leave_days, $message);
+
+		$message = str_replace('{{STARTDATE}}', $start_date, $message);
+		$message = str_replace('{{ENDDATE}}', $end_date, $message);
+
+		$message = str_replace('{{COMMENT}}', $comment, $message);
+
+		$message = str_replace('{{APPLYDATE}}', $leave_create, $message);
+		$message = str_replace('{{URL}}',$url, $message);
+		$message = str_replace('{{BUTTON_NAME}}',$button, $message);
+
+		$headers[] = 'MIME-Version: 1.0';
+		$headers[] = 'Content-type: text/html; charset=iso-8859-1';
+		$headers[] = "From: $email";
+		$headers[] = "BCC: mandysin@eseelynx.com ";
+
+		mail($leave_apply_email,$subject,$message,implode("\r\n", $headers));
+
+
+	}
+
+	if($action=='reject'){
+		$subject = "[Rejected] Leave Application #".$reference."-".$leave_apply_username;
+
+		$description = 'Your application has been rejected.';
+
+		//$url = 'https://hr.eseelynx.com/leave/leave_record.php';
+		$button = 'View more details';
+
+		$message = str_replace('{{SITE_LOGO}}', $company_logo, $message);
+		$message = str_replace('{{RECEIPIENT_NAME}}', $leave_apply_username, $message);
+		$message = str_replace('{{DESCRIPTION}}', $description, $message);
+
+		$message = str_replace('{{NAME}}', $leave_apply_username, $message);
+		$message = str_replace('{{COMPANY}}', $combined_company_names, $message);
+
+		$message = str_replace('{{EMPLOYEE_NO}}', $staff_apply_id, $message);
+
+		$message = str_replace('{{TYPE_OF_LEAVE}}', $type_of_leave['display_title'], $message);
+		$message = str_replace('{{DAY}}', $leave_days, $message);
+		$message = str_replace('{{STARTDATE}}', $start_date, $message);
+		$message = str_replace('{{ENDDATE}}', $end_date, $message);
+
+		$message = str_replace('{{COMMENT}}', $claim_comment, $message);
+
+		$message = str_replace('{{APPLYDATE}}', $leave_create, $message);
+		$message = str_replace('{{URL}}', $url, $message);
+		$message = str_replace('{{BUTTON_NAME}}', $button, $message);
+
+		$headers[] = 'MIME-Version: 1.0';
+		$headers[] = 'Content-type: text/html; charset=iso-8859-1';
+		$headers[] = "From: $email";
+		$headers[] = "BCC: mandysin@eseelynx.com ";
+
+		mail($leave_apply_email,$subject,$message,implode("\r\n", $headers));
+
+	}
+
+	if($action=='cancel'){
+		$subject = "[Cancelled] Leave Application #".$reference."-".$leave_apply_username;
+
+		$description = 'Your application has been cancelled.';
+		//$url = 'https://hr.eseelynx.com/leave/leave_record.php';
+		$button = 'View more details';
+
+
+		$message = str_replace('{{SITE_LOGO}}', $company_logo, $message);
+		$message = str_replace('{{RECEIPIENT_NAME}}', $leave_apply_username, $message);
+
+		$message = str_replace('{{DESCRIPTION}}', $description, $message);
+		$message = str_replace('{{NAME}}', $leave_apply_username, $message);
+		$message = str_replace('{{COMPANY}}', $combined_company_names, $message);
+		$message = str_replace('{{EMPLOYEE_NO}}', $staff_apply_id, $message);
+
+		$message = str_replace('{{TYPE_OF_LEAVE}}', $type_of_leave['display_title'], $message);
+		$message = str_replace('{{DAY}}', $leave_days, $message);
+
+		$message = str_replace('{{STARTDATE}}', $start_date, $message);
+		$message = str_replace('{{ENDDATE}}', $end_date, $message);
+
+		$message = str_replace('{{COMMENT}}', $comment, $message);
+		$message = str_replace('{{APPLYDATE}}', $leave_create, $message);
+
+		$message = str_replace('{{URL}}',$url,$message);
+		$message = str_replace('{{BUTTON_NAME}}',$button,$message);
+
+		$headers[] = 'MIME-Version: 1.0';
+		$headers[] = 'Content-type: text/html; charset=iso-8859-1';
+		$headers[] = "From: $email";
+		$headers[] = "BCC: mandysin@eseelynx.com ";
+
+		mail($leave_apply_email,$subject,$message,implode("\r\n", $headers));
+
+	}
+
+
+	//}
+
+}
+
+/*
+// Unpaid Personal leave can still count on annual leave
+function getUnpaidDays_Cant_Earn_AnnualLeave($up_to_date, $user_id){
+
+	$hdb = getConnection();   // defined in php-lib/DatabaseClass.php
+
+	$year = substr($up_to_date, 0, 4);
+	$sSql = "select SUM(number_of_day)  as ttl from leave_detail where user_id=:id and leave_date >= '$year-01-01' and leave_date <= '$up_to_date'
+				and is_paid_leave='N' and (type_of_leave != 'PERSONAL_LEAVE' and type_of_leave != 'BEREAVEMENT_LEAVE')
+				and status='Confirmed'   ";
+	$params = array('id' => $user_id);
+	$dResult = $hdb->query($sSql,$params);
+	if (count($dResult)>0){
+
+		return $dResult[0]['ttl'];
+	}else return 0;
+
+}
+
+*/
+
+function getLoginDetail(){
+	global $_SESSION;
+
+	if (isset($_SESSION['isLogin']) && $_SESSION['isLogin'] == true){
+
+		$hdb = getConnection();   // defined in php-lib/DatabaseClass.php
+
+		$sSql = "select * from user where id=:id and is_delete='N' and is_active='Y' ";
+
+		$params = array('id' => $_SESSION['login_account']['id']);
+		$dResult = $hdb->query($sSql,$params);
+		if (count($dResult)>0){
+			$_SESSION['login_account'] =  $dResult[0];
+			$_SESSION['isLogin'] = true;
+			$_SESSION['login_account']['timestamp'] = time();
+			return true;
+		}else return false;
+
+	}
+	return false;
+}
+
+///*************************************************************************************
+function getTotalNumberOfLeave($user_id, $type_of_leave='',$pick_date='', $end_date='', $sStatus_sql='' ){
+	$hdb = getConnection();
+
+	if($pick_date==''){
+		$sql_com='';
+	}else {
+		$sql_com="and leave_date >= '$pick_date' ";
+	}
+
+	if ($end_date == null || $end_date==''){
+		$sql_inner = "";
+	}else {
+		$sql_inner = " and leave_date <= '$end_date' ";
+	}
+
+	$sStatus_sql = $sStatus_sql ? " and (".$sStatus_sql.") "  : ' AND status="Confirmed" ';
+
+	//$sql = "select COALESCE(SUM(number_of_day), 0) as total_day from leave_table where user_id=:id AND status='Confirmed' and type_of_leave='$type_of_leave' $sql_com $sql_inner ";
+	$sql = "select SUM(number_of_day) as total_day from leave_detail where user_id=:id $sStatus_sql and type_of_leave='$type_of_leave' $sql_com $sql_inner ";
+
+ //echo $sql ."\r\n";
+	$params = array('id'=>$user_id);
+
+	$result = $hdb->query($sql,$params);
+
+	return $result[0]['total_day'];
+
+
+}
+
+
+
+///*************************************************************************************
+function getUserRecord($user_id){
+	$hdb = getConnection();   // defined in php-lib/DatabaseClass.php
+
+	$sSql = "select * from user where id=:id and is_delete='N' and is_active='Y' ";
+	$params = array('id' => $user_id);
+	$dResult = $hdb->query($sSql,$params);
+	if (count($dResult) >0){
+		return $dResult[0];
+	}else return '';
+}
+
+
+
+///*************************************************************************************
+// Unpaid Personal leave and Bereavement leave is count on annual leave
+function getTotalUnpaidDays($user_id, $start_date, $end_date){
+	$hdb = getConnection();   // defined in php-lib/DatabaseClass.php
+
+	$sSql = "select sum(detail.number_of_day) as ttl from leave_table  left join leave_detail as detail on leave_table.reference_id=detail.leave_record_id
+	where leave_table.user_id=:user_id AND leave_table.status='Confirmed'
+	and (detail.leave_date <= :end_date AND detail.leave_date >= :start_date )
+	and detail.is_paid_leave='N'
+	and (leave_table.type_of_leave != 'PERSONAL_LEAVE' and leave_table.type_of_leave != 'BEREAVEMENT_LEAVE') ";
+	$params = array('user_id' => $user_id, 'start_date' =>$start_date, 'end_date'=>$end_date);
+	$dResult = $hdb->query($sSql,$params);
+	//  echo '<!-- '.$hdb->odo_sql_debug($sSql, $params) . "--> \r\n";
+	if (count($dResult) >0){
+		return $dResult[0]['ttl'];
+	}else return 0;
+}
+
+
+
+///*************************************************************************************
+function getBalanceForwardFromDB($type_of_leave, $user_id=0){
+	if ($user_id ==0){
+		$userRecord = $_SESSION['login_account'];
+	}else {
+		$userRecord = getUserRecord($user_id);
+		if ($userRecord =='')
+		return 0;
+	}
+
+	$hdb = getConnection();   // defined in php-lib/DatabaseClass.php
+
+	$sSql = "select * from leave_balance where user_id=:user_id and type_of_leave =:type_of_leave order by balance_date desc limit 1 ";
+	$params = array('user_id' => $user_id, 'type_of_leave'=>$type_of_leave);
+	$dResult = $hdb->query($sSql,$params);
+	if (count($dResult) >0){
+		return $dResult[0];
+	}else return array();
+}

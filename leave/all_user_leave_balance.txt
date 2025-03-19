@@ -1,0 +1,205 @@
+<?php
+include 'header.php';
+
+
+$id =$_SESSION['login_account']['id'];
+//$company =$_SESSION['login_account']['company'];
+$role=$_SESSION['login_account']['role'];
+
+
+
+
+$company = isset($_REQUEST['company']) && $_REQUEST['company'] ? trim($_REQUEST['company']) : 'show_all';
+
+
+//echo $company
+
+/*$companyArray = explode(',', $company);
+$firstCompany = $companyArray[0];*/
+
+
+
+
+/*$sql = "select * from company where id = '1'";
+$result = $hdb->query($sql);
+
+if(count($result)>0){
+  foreach ($result as $key => $value) {
+    $type = $value['incorporation_type'];
+    $company_name = $value['company_name'];
+
+  }
+
+}*/
+$Date = date('Y-m-d');
+$year = date('Y');
+
+ ?>
+<!--<form id="listForm" action="" method="post" >
+
+<select class="form-select form-control-lg" name="company" onchange="submitForm()">
+  <option value="show_all">Show All &nbsp; &nbsp; &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</option>
+  <?php
+
+  ?>
+
+</option>
+</form>-->
+
+<form id="listForm" action="" method="post" >
+<div class="row">
+  <h2 id="list_header">Staff Leave Balance </h2>
+  <?php
+  $companyid =$_SESSION['login_account']['company'];
+
+
+
+   ?>
+<select class="form-select form-control-lg" name="company" onchange="submitForm()">
+
+  <option value="show_all">Show All &nbsp; &nbsp; &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</option>
+  <?php
+  $sql = "SELECT DISTINCT c.company_name,c.id
+  FROM user u
+  JOIN company c ON FIND_IN_SET(c.id,u.company)
+  WHERE u.id = $id";
+
+  $company_option=$hdb->query($sql);
+
+  if(count($company_option)>0){
+    foreach ($company_option as $value => $label) {
+      $value = $label['id']; // Replace 'company_id' with the actual column name for the option value
+      $label = $label['company_name'];
+      //$hidden  = ($value === 'PENDING_LIST' && $role=='user') ? 'hidden' : '';
+
+      $selected = (isset($_POST['company']) && $_POST['company'] == $value) ? 'selected' : '';
+      echo '<option value="' . $value . '"  ' . $selected . '>' . $label . '</option>';
+    }
+  }
+  ?>
+
+</option>
+</select>
+</div>
+</form>
+
+
+<div class="container-fuild" id="userListCell">
+
+
+  <table id="formtable" class="table table-striped" style="width:100%">
+
+    <thead>
+      <tr>
+        <th>Firstname</th>
+        <th>Lastname</th>
+        <th>Employee ID</th>
+        <th>Vacation leave remaing up to <?php echo $Date; ?></th>
+        <th>Vacation leave remaing up to <?php echo $year?> year end</th>
+        <th>Personal leave remaing up to <?php echo $Date; ?></th>
+        <th>Personal leave remaing up to <?php echo $year ?> year end</th>
+        <th>Medical leave remaing up to <?php echo $Date; ?></th>
+        <th>Medical leave remaing up to <?php echo $year ?> year end</th>
+      </tr>
+    </thead>
+    <tbody>
+
+      <?php
+      $companyid =$_SESSION['login_account']['company'];
+      $companyArray=explode(',',$companyid);
+
+      //$hdb = getConnection();
+
+      if($company == 'show_all'){
+        //$company_quote= "";
+        foreach($companyArray as $index => $value){
+          if($index > 0){
+            $company_quote = "";
+          }else {
+            $company_quote= "and company = '$value'";
+          }
+
+        }
+
+      }else {
+        $company_quote = "and company = '$company'";
+      }
+
+      if($role == 'supervisor'){
+        $role_quote = "and role = 'user' ";
+      }elseif ($role == 'executive') {
+        $role_quote = "and role = 'supervisor' ";
+      }
+
+
+      $sql ="SELECT u.*, GROUP_CONCAT(c.company_name) AS combined_company_names,c.incorporation_type
+      FROM user AS u
+      LEFT JOIN company AS c ON FIND_IN_SET(c.id, u.company) > 0
+      WHERE is_delete = 'N' $role_quote  $company_quote
+      GROUP BY u.id ";
+
+
+      //print_r($sql);
+
+      $reportResult=$hdb->query($sql);
+      //print_r($reportResult);
+
+      if(count($reportResult) >0){
+        foreach($reportResult as $key => $value){
+          $firstname = $value['first_name'];
+          $lastname = $value['last_name'];
+          $staff_id = $value['staff_id'];
+          $userid = $value['id'];
+          $type = $value['incorporation_type'];
+       ?>
+
+       <tr>
+
+
+      <td><?php echo $firstname; ?></td>
+      <td><?php echo $lastname; ?></td>
+      <td><?php echo $staff_id; ?></td>
+      <td><?php echo calculateTotalLeaveEntitlement($Date,$userid) ?> days</td>
+      <td><?php echo calculateTotalLeaveEntitlement($year.'-12-31',$userid) ?> days</td>
+      <td><?php echo $year==date('Y')? calculatePersonalLeaveBalance( $Date, $userid, PAID_LEAVE, $bShowDebug=true, '').' days' : 'N/A' ?></td>
+      <td><?php echo $year==date('Y')? calculatePersonalLeaveBalance( $year.'-12-31', $userid, PAID_LEAVE, $bShowDebug=true, '').' days' : 'N/A' ?></td>
+      <td><?php echo $year==date('Y')? calculateMedicalLeaveBalance( $Date, $userid, PAID_LEAVE,true,'',$type).' days' : 'N/A' ?></td>
+      <td><?php echo $year==date('Y')? calculateMedicalLeaveBalance( $year.'-12-31', $userid, PAID_LEAVE,true,'',$type).' days' : 'N/A' ?></td>
+
+    </tr>
+
+  <?php }} ?>
+
+
+
+    </tbody>
+
+
+
+
+  </table>
+</div>
+
+
+
+<script type="text/javascript">
+
+function submitForm(){
+  document.forms[0].submit();
+}
+
+
+
+$('#formtable').DataTable({
+  //ordering:false,
+  //"LengthChange": false,
+  "stateSave": true,
+  //  "scrollX": true,
+  // "scrollCollapse": true,
+  'responsive':true,
+  "pagingType": 'full_numbers',
+  "paging" :   true,
+  "info": true,
+
+});
+</script>

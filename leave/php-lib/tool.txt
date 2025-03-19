@@ -1,0 +1,1539 @@
+<?php
+// ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
+// Advanced functions & methods library
+	
+	define("PATTERN_EMAIL",	"[a-z0-9]+([-_\\./]?[a-z0-9]+)*@[a-z0-9]+([-\\.]?[a-z0-9]+)*\\.[a-z]{2,}");
+	define("PATTERN_URI", "(https?|ftp|gopher|news)://[^ \t\n\r]+");
+	define("PATTERN_URL", "((https?|ftp|gopher|news)://)?[-a-zA-Z0-9]+(\\.[-a-zA-Z0-9])*\\.[a-zA-Z]{2,}(/[a-zA-Z0-9%\\?=\\.]+)*");
+	
+	
+	/**
+ *  Given a valid file location (it must be an path starting with "/"), i.e. "/css/style.css",
+ *  it returns a string containing the file's mtime as query string, i.e. "/css/style.css?v=0123456789".
+ *  Otherwise, it returns the file location.
+ *
+ *  @param $file  the file to be loaded.
+ */
+function auto_version($file, $DOCUMENT_ROOT_PATH=''){
+	$DOCUMENT_ROOT_PATH = $DOCUMENT_ROOT_PATH ? $DOCUMENT_ROOT_PATH : $_SERVER['DOCUMENT_ROOT']; 
+    // if it is not a valid path (example: a CDN url)
+    if (strpos($file, '/') !== 0 || !file_exists($DOCUMENT_ROOT_PATH . $file)) return $file;
+
+    // retrieving the file modification time
+    // https://www.php.net/manual/en/function.filemtime.php
+    //$mtime = filemtime($_SERVER['DOCUMENT_ROOT'] . $file);
+	$mtime = filemtime($DOCUMENT_ROOT_PATH. $file);
+    //return sprintf("%s?v=%d", $file, $mtime);
+	return $file .'?v='. date("YmdHis", $mtime);
+}
+
+
+
+
+	// Join array into a string. An example array:
+	// 		$array = array("a"=>1,"b"=>2,"c"=>3);
+	// 1) Pass argument to sValueSep to join array values
+	//		arrayJoin($array, "+");
+	// will produce:
+	//		1+2+3
+	// 2) Pass argument to sKeySep to join array keys
+	// ** To by-pass value deliminator, use NULL **
+	//		arrayJoin($array, null, ":");
+	// will produce:
+	//		a:b:c
+	// 3) Pass both arguments to join element key and value by sKeySep, and resulting pairs by sValueSep
+	// A normal practice on both join is on URL query. For example,
+	// 		arrayJoin($array, "&", "=");
+	// will produce:
+	//		a=1&b=2&c=3
+	function arrayJoin($aArray, $sValueSep = null, $sKeySep = null)
+	{
+		$sString = "";
+		if (is_array($aArray)) {
+			if ($sKeySep !== null && $sValueSep !== null) {
+				$aArrayKeys = array_keys($aArray);
+				$aJoin = array();
+				foreach ($aArrayKeys as $sKeyValue) {
+					$aJoin[] = $sKeyValue . $sKeySep . $aArray[$sKeyValue];
+				}
+				$sString = join($sValueSep, $aJoin);
+			} elseif ($sValueSep !== null) {
+				$aJoin = array_values($aArray);
+				$sString = join($sValueSep, $aJoin);
+			} elseif ($sKeySep !== null) {
+				$aJoin = array_keys($aArray);
+				$sString = join($sKeySep, $aJoin);
+			}
+		}
+		return $sString;
+	}
+	
+	// Walk through array hierarchy
+	// By providing a callback function, you can examine each key and value in array
+	// Callback function declaration:
+	//		Callback_function_name($value[, $key[, $level[, $pass_thru_args1, [, $pass_thru_args2 ... ]]]]) { .. statements .. }
+	// $key is optional; if this is an index array
+	// $level is optional; for your reference on the current depth of the array hierarchy
+	// Looping would be ended if the callback function returns FALSE
+	// Returns highest depth in array
+	function arrayWalk($dArray, $sCallBackFunc = "", $aPassThruArgs = "")
+	{
+		if (!is_array($dArray) || !function_exists($sCallBackFunc)) {
+			return NULL;
+		}
+		$aPassThruArgs = ifNotType($aPassThruArgs, "array");
+		$sRef = '$dArray';
+		$aKeyHolder = array();
+		$iLevel = 0;
+		$iMaxLevel = 0;
+		reset($dArray);
+		while (true) {
+			eval('$dElement = each(' . $sRef . ');');
+			if ($dElement !== false) {
+				// Apply call back function
+				// End loop if function returns FALSE
+				$aCallbackArgs = array_merge(array($dElement["value"], $dElement["key"], $iLevel), $aPassThruArgs);
+				if (call_user_func_array($sCallBackFunc, $aCallbackArgs) === false) {
+					break;
+				} else {
+					if (is_array($dElement["value"])) {
+						$iLevel ++;
+						$iMaxLevel = ($iLevel > $iMaxLevel) ? $iLevel : $iMaxLevel;
+						$aKeyHolder[$iLevel] = $dElement["key"];
+						$sRef .= '[$aKeyHolder[' . $iLevel . ']]';
+					}
+				}
+			} elseif ($iLevel > 0) {
+				unset($aKeyHolder[$iLevel]);
+				$iLevel --;
+				$sRef = ereg_replace('\\[\\$aKeyHolder\\[[0-9]+\\]\\]$', "", $sRef);
+			} else {
+				break;
+			}
+		}
+		return $iMaxLevel;
+	}
+	
+	// Chop string in specific length, appended by $sSuffix
+	function chopString($sString, $iLength, $sSuffix="...") {
+		if (strLen($sString) > $iLength - strLen($sSuffix)) {
+			$sString = substr($sString, 0, $iLength - strLen($sSuffix));
+			// Chop out trailing extended ASCII character to avoid merge with the next character
+			// eg, HTML tag right after extended character may appear as "?/font>"
+			$sString = preg_replace("/\W*$/", "", $sString);
+			$sString .= $sSuffix;
+		}
+		return ($sString);
+	}
+	
+	// Chop sentence or paragraph in specific number of words, optionally appended by $sSuffix
+	function chopWords($sString, $iWords, $sSuffix="...") {
+		if (is_int($iWords) && $iWords > 1) {
+			$aWords = split("[ ]+", $sString);
+			if (sizeof($aWords) > $iWords) {
+				$aWords = array_slice($aWords, 0, $iWords);
+				$sString = join($aWords, " ");
+				$sString .= $sSuffix;
+			}
+		}
+		return ($sString);
+	}
+	
+	// Return width and height (in respect ratio) within a given bounding area
+	function constrainRect($iBoundWidth, $iBoundHeight, $iWidth, $iHeight)
+	{
+		print "<!--";
+		print $iBoundWidth . ":" . $iBoundHeight . "-" . $iWidth . ":" . $iHeight;
+		$aRect = array($iWidth, $iHeight);
+		if ($iWidth > 0 && $iHeight > 0) {
+			$fRatio = $iWidth / $iHeight;
+			if ($iBoundWidth > 0 && $iWidth > $iBoundWidth) {
+				$iWidth = $iBoundWidth;
+				$iHeight = round($iWidth / $fRatio);
+			}
+			if ($iBoundHeight > 0 && $iHeight > $iBoundHeight) {
+				$iHeight = $iBoundHeight;
+				$iWidth = round($iHeight * $fRatio);
+			}
+			print "-" . $iWidth . ":" . $iHeight;
+			$aRect = array($iWidth, $iHeight);
+		}
+		print "-->";
+		return $aRect;
+	}
+	
+	// Make server variables into constants
+	function createEnvConstants()
+	{
+		global $HTTP_SERVER_VARS;
+		$dVars = ifNotType($_SERVER, "array", $HTTP_SERVER_VARS);
+		foreach ($dVars as $sEnvName => $sEnvValue) {
+//			if (!ereg("^object|array$", getType($sEnvValue))) {
+			if (! preg_match("/^object|array$/", getType($sEnvValue))) {
+				define($sEnvName, $sEnvValue);
+			}
+		}
+	}
+	
+	// Escape/add slashes before characters specified in $sEscapeList
+	// Note : Slash character "\" is always escaped
+	/*function escapeString($sString, $sEscapeList="'\"") {
+		$sString = ereg_replace("\\\\", "\\\\", $sString);
+		// don't escape slash, we have already done it above explicitly
+		$sEscapeList = ereg_replace("\\\\", "", $sEscapeList);
+		$sEscapeList = ereg_replace("\"", "\\\"", $sEscapeList);
+		$sString = ereg_replace("([" . $sEscapeList . "])", "\\\\1", $sString);
+		return ($sString);
+	}*/
+	function escapeString($sString, $sEscapeList="'\"") {
+		$sString = preg_replace("/\\\\/", "\\\\", $sString);
+		// don't escape slash, we have already done it above explicitly
+		$sEscapeList = preg_replace("/\\\\/", "", $sEscapeList);
+		$sEscapeList = preg_replace("/\"/", "\\\"", $sEscapeList);
+		$sString = preg_replace("/([" . $sEscapeList . "])/", "\\\\1", $sString);
+		return ($sString);
+	}
+	
+	
+	// Filter submission of form image (_x & _y) into its parent's name
+	// (i.e. ok_x => ok)
+	function filterFormVars($dFormVars) {
+		if (is_array($dFormVars) && sizeof(array_keys($dFormVars)) > 0) {
+			$dFilteredVars = array();
+			foreach ($dFormVars as $sKey => $sValue) {
+				if (ereg("^(.+)_[xy]$", $sKey, $aMatches)) {
+					$sKey = $aMatches[1];
+				}
+				$dFilteredVars[$sKey] = $sValue;
+			}
+			return ($dFilteredVars);
+		} else {
+			return ($dFormVars);
+		}
+	}
+	
+	// Force SSL
+	// * For non-wildcard certificates *
+	// Some SSL certificates are not signed for wildcard domains (*.domainname.com)
+	// thus, using HTTPS protocol on only "domainname.com" (which is usually set as
+	// the default web server port = 80) may raise certificate warning on client
+	// browser. By specifying certified SSL subdomain, client will be redirected to
+	// https://$sSecureSubdomain.domainname.com if HTTP_HOST is not prefixing with
+	// such subdomain
+	function forceSecure($sSecureSubdomain = "")
+	{
+		$sHost = getEnv("HTTP_HOST");
+		$bSubdomainPass = ($sSecureSubdomain && !eregi("^" . $sSecureSubdomain . "\\.", $sHost)) ? false : true;
+		if (!getEnv("HTTPS") || !$bSubdomainPass) {
+			$sHost = (!$bSubdomainPass) ? $sSecureSubdomain . "." . $sHost : $sHost;
+			reSubmitForm(getEnv("REQUEST_METHOD"), $sHost, true);
+		}
+	}
+	
+	// Force Subdomain
+	// Targeted to prevent user from typing ONLY domain name with out subdomain
+	// i.e. example.com instead of www.example.com
+	// which might cause programming or server difficulties in some situations
+	function forceSubDomain($sDomain, $sSubDomain = "www")
+	{
+		$sHost = getEnv("HTTP_HOST");
+		$sTargetHost = $sSubDomain . "." . $sDomain;
+		if (!eregi("^" . preg_quote($sTargetHost), $sHost)) {
+			reSubmitForm(getEnv("REQUEST_METHOD"), $sTargetHost);
+		}
+	}
+	
+	// Retrieve all input field specs
+	// Variable name of fields is "FIELDS" by default, but could be overrided by providing $sFieldVarName
+	function formFields($sFieldVarName = NULL)
+	{
+		static $dFields;
+		static $sFieldName;
+		
+		$sFieldVarName = ifNotType($sFieldVarName, "string", "FIELDS");
+		if (!is_array($dFields) || $sFieldVarName != $sFieldName) {
+			// Stored
+			$sFieldName = $sFieldVarName;
+			$dFields = array();
+			foreach ($GLOBALS as $sVarName => $vVarValue) {
+				if (is_array($vVarValue) && ($sVarName == $sFieldName || ereg("_" . preg_quote($sFieldName) . "$", $sVarName))) {
+					$dFields = array_merge($dFields, $vVarValue);
+				}
+			}
+		}
+		return $dFields;
+	}
+	
+	// Retrieve form field's property
+	function formField($sId, $sPropName, $sFieldVarName = NULL)
+	{
+		$dFields = ifNotType($dFields, "array", formFields($sFieldVarName));
+		if (is_array($dFields[$sId])) {
+			return $dFields[$sId][$sPropName];
+		}
+		return NULL;
+	}
+	
+	// Format file size to fit a proper unit (B, KB, MB, etc)
+	function formatFileSize($iNumber, $iPrecision = 0, $sTargetUnit = "", $bLongName = false, $sUnitPrefix = "", $sThousandSep = "")
+	{
+		$dUnits = array("b","kb","mb","gb","tb");
+		$dUnitNames = array("b" => "Byte", "kb" => "KiloByte", "mb" => "MegaByte", "gb" => "GigaByte", "tb" => "TerraByte");
+		$iNumber = ereg_replace("[^0-9\\.]", "", strVal($iNumber));
+		$iLength = strLen($iNumber);
+		$sUnit = ($sTargetUnit && in_array(strToLower($sTargetUnit), $dUnits)) ? strToLower($sTargetUnit) : $dUnits[floor(($iLength - 1) / 3)];
+		for ($u=0;$u<sizeof($dUnits);$u++) {
+			if ($sUnit == $dUnits[$u]) {
+				$iNumber = $iNumber / pow(1024, $u);
+				// Auto detect precision, if precision set to NULL explicitly
+				if ($iPrecision === NULL) {
+					$iPrecision = (ereg("\\.([0-9]+)$", strVal($iNumber), $aMatches)) ? strLen($aMatches[1]) : 0;
+				} else {
+					$iPrecision = intVal($iPrecision);
+				}
+				$iNumber = number_format($iNumber, $iPrecision, ".", $sThousandSep);
+				break;
+			}
+		}
+		$sUnit = ($bLongName === true) ? $dUnitNames[$sUnit] : $sUnit;
+		return $iNumber . $sUnitPrefix . $sUnit;
+	}
+	
+	// Get value from variable, instead of relying on PHP engine's
+	// register_global parameter, which is supposed to be turned off
+	function formVar($sVarName, $sVarKey = NULL){
+			
+		if (isset($GLOBALS["_" . strToUpper(getEnv("REQUEST_METHOD")) ][$sVarName]) && !is_array($sVarName)){		
+			$sVarVal = $GLOBALS["_" . strToUpper(getEnv("REQUEST_METHOD")) ][$sVarName];
+			if (is_array($sVarVal) && $sVarKey !== NULL) {
+				$sVarVal = $sVarVal[$sVarKey];
+			}
+			return $sVarVal;
+		}			
+	}
+	
+	// Get current request (GET/POST) array
+	function formArray()
+	{
+		if (!$dVars = ifEmpty($GLOBALS["_" . strToUpper(getEnv("REQUEST_METHOD")) ], false)) {
+			$dVars = ifEmpty($GLOBALS["_" . strToUpper(getEnv("REQUEST_METHOD"))], array());
+		}
+		return $dVars;
+	}
+	
+	// Format string (left or right padding with specified spacing character)
+	// ----------------------------------------------------------------------
+	
+	function formatString($sIn, $iLength, $iMode=0, $sPad=" ") {
+		// iMode : 0 : left (default)
+		// iMode : 1 : right
+		$sOut = $sIn;
+		$sAdd = "";
+		if ($iLength > strLen($sIn)):
+			for ($p=0;$p<$iLength-strLen($sIn);$p++):
+				$sAdd .= $sPad;
+			endfor;
+			if ($iMode == 1):
+				$sOut = $sAdd . $sOut;
+			else:
+				$sOut .= $sAdd;
+			endif;
+		endif;
+		return ($sOut);
+	}
+	
+	// Get browser information
+	function getUserAgent() {
+		$dInfo = array();
+		$dInfo["name"] = "Unknown";
+		$aMatches = array();
+		$sUserAgent = getEnv("HTTP_USER_AGENT");
+		if (eregi("ozilla/([0-9]+\.[0-9a-z]+)( \[[0-9a-z]+\])? \((.+)\)", $sUserAgent, $aMatches)) {
+			$dInfo["name"] = "NS";
+			$dInfo["version"] = doubleVal($aMatches[1]);
+			$sExtraInfo = $aMatches[3];
+			$aExtraInfo = explode("; ", $sExtraInfo);
+			foreach ($aExtraInfo as $sInfo) {
+				if (eregi("msie ([0-9]+\.[0-9a-z]+)", $sInfo, $aMatches)):
+					$dInfo["name"] = "MSIE";
+					$dInfo["version"] = doubleVal($aMatches[1]);
+				elseif (eregi("(mac.*)", $sInfo, $aMatches)):
+					$dInfo["os"] = $aMatches[1];
+				elseif (eregi("(win.*)", $sInfo, $aMatches)):
+					$dInfo["os"] = $aMatches[1];
+				endif;
+			}
+		}
+		return ($dInfo);
+	}
+	
+	function getHtmlAttributes($dAttr)
+	{
+		$sAttr = "";
+		if (is_array($dAttr)) {
+			foreach ($dAttr as $sAttrName => $sAttrValue) {
+				$sAttr .= sprintf('%s="%s" ', $sAttrName, htmlEntities($sAttrValue));
+			}
+			$sAttr = trim($sAttr);
+		}
+		return $sAttr;
+	}
+	
+	// Get HTML Option tags from given associative array
+	function getHtmlSelectOptions($sElementName, $dItems, $dSelectedAttr = "")
+	{
+		$sOption = "";
+		if (is_array($dItems)) {
+			foreach ($dItems as $sValue => $sName) {
+				$dAttr = array("value" => $sValue);
+				if (formVar($sElementName) !== NULL && strVal(formVar($sElementName)) === strVal($sValue)) {
+					$dAttr["selected"] = "selected";
+					if (is_array($dSelectedAttr)) {
+						$dAttr = array_merge($dSelectedAttr, $dAttr);
+					}
+				}
+				$sOption .= getHtmlTag("option", $dAttr, $sName);
+			}
+		}
+		return $sOption;
+	}
+	
+	function getHtmlTag($sTagName, $dAttr = "", $sChildContent = "")
+	{
+		$sTag = "";
+		$aEmptySetTags = array("base", "img", "br", "hr", "meta", "link", "input", "button", "param");
+		$sTagName = trim($sTagName);
+		if ($sTagName != "") {
+			//$sChildContent = (eregi("^" . join("|", $aEmptySetTags) . "$", $sTagName)) ? false : $sChildContent;
+			$sChildContent = (preg_match("/^" . join("|", $aEmptySetTags) . "$/", $sTagName)) ? false : $sChildContent;
+			$dAttr = (is_array($dAttr)) ? $dAttr : array();
+			switch (strToLower($sTagName)) {
+				case "img":
+					// Auto get image dimensions for img tag
+					// Prepare default attributes
+					$dDefaultAttr["border"] = "0";
+					$dDefaultAttr["alt"] = "";
+					if ($sSrc = $dAttr["src"]) {
+						if (!eregi("^(http(s)?|ftp|gopher)://", $sSrc)) {
+							if (ereg("^/", $sSrc)) {
+								$sSrc = getEnv("DOCUMENT_ROOT") . $sSrc;
+							} else {
+								$sSrc = dirname(getEnv("SCRIPT_FILE")) . "/" . $sSrc;
+							}
+							if (file_exists($sSrc) && function_exists("getimagesize")) {
+								$aImageSize = getImageSize($sSrc);
+								$dDefaultAttr["width"] = $aImageSize[0];
+								$dDefaultAttr["height"] = $aImageSize[1];
+							}
+						}
+					}
+					break;
+				case "input":
+					// Retrieve input value, except password, file field, and buttons; if not explicitly passed into function
+					$sFieldName = $dAttr["name"];
+					$sFormValue = formVar($sFieldName);
+					$sInputType = strToLower($dAttr["type"]);
+					if ($sFormValue !== NULL && !in_array($sInputType, array("password", "file", "button", "submit", "reset"))) {
+						$dDefaultAttr["value"] = $sFormValue;
+					}
+					if ($sInputType == "radio") {
+						if ($sFormValue !== $dAttr["value"]) {
+							$dDefaultAttr["checked"] = "checked";
+						}
+					} elseif ($sInputType == "checkbox") {
+						if ($sFormValue !== NULL) {
+							$dDefaultAttr["checked"] = "checked";
+						}
+					}
+					$dDefaultAttr["id"] = $sFieldName;
+					break;
+				case "textarea":
+					// Retrieve textarea input value, if no child content passed
+					$sFieldName = $dAttr["name"];
+					$sFormValue = formVar($sFieldName);
+					if ($sFormValue !== NULL && $sChildContent !== "") {
+						$sChildContent = $sFormValue;
+					}
+					$dDefaultAttr["id"] = $sFieldName;
+					break;
+			}
+			if (isset($dDefaultAttr) && is_array($dDefaultAttr)) {
+				$dAttr = array_merge($dDefaultAttr, $dAttr);
+			}
+			$sTag = "<" . $sTagName . " " .  getHtmlAttributes($dAttr);
+			if ($sChildContent === false) {
+				$sTag .= " />";
+			} else {
+				$sTag .= ">" . $sChildContent . "</" . $sTagName . ">";
+			}
+		}
+		return $sTag;
+	}
+	
+	// Create general SGML tag with auto-indent option
+	// $dAttr array indicates tag attributes with Key and Value as attribute's name and value respecitively
+	// Passing NULL value to $sChildContent to indicate an empty set element
+	function getSgmlTag($sTagName, $dAttr = "", $sChildContent = NULL, $bAutoIndent = true)
+	{
+		$sTag = "";
+		$sTagName = trim($sTagName);
+		if ($sTagName != "") {
+			$dAttr = (is_array($dAttr)) ? $dAttr : array();
+			$sTag = "<" . $sTagName;
+			if (sizeof($dAttr) > 0) {
+				$sTag .= " " .  getHtmlAttributes($dAttr);
+			}
+			if ($sChildContent === NULL) {
+				$sTag .= " />";
+			} else {
+				if ($bAutoIndent) {
+					$sChildContent = trim($sChildContent);
+					if (ereg("^<", $sChildContent)) {
+						// Indent content if child content is a tag
+						$sChildContent = "\n" . preg_replace("/^([^\n]+)/m", "\t\\1", $sChildContent) . "\n";
+					}
+				}
+				$sTag .= ">" . $sChildContent . "</" . $sTagName . ">";
+			}
+		}
+		return $sTag;
+	}
+	
+	// get IP Address
+	function getIPAddress(){
+		// get the user IP number
+			$dIPAddress = getRealRemoteAddr();
+			if (sizeof($dIPAddress) > 1) {
+				$ip = $dIPAddress['Proxy Address'].",".$dIPAddress['Remote Address'];
+			} else {
+				$ip = $dIPAddress['Remote Address'];
+			}
+			return $ip;
+	}
+	
+	
+	// Retrieve actual remote address (IP behind proxy)
+	function getRealRemoteAddr()
+	{
+		$dRemoteAddr = array(
+			"Remote Address" => getEnv("REMOTE_ADDR")
+		);
+		if (getEnv("HTTP_X_FORWARDED_FOR")) {
+			$dRemoteAddr = array(
+				"Remote Address" => getEnv("HTTP_X_FORWARDED_FOR"),
+				"Proxy Host" => getEnv("HTTP_VIA"),
+				"Proxy Address" => getEnv("REMOTE_ADDR")
+			);
+		}
+		return $dRemoteAddr;
+	}
+	
+	// Translate htmlEntities backward
+	function htmlDecodeEntities($sText)
+	{
+		$dBackTrans = array_flip(get_html_translation_table(HTML_ENTITIES));
+		return strtr($sText, $dBackTrans);
+	}
+	
+	// Convert HTML entities into text format
+	// and <br /> to newline character
+	function htmlToText($sHtml) {
+		$dHtmlEntities = get_html_translation_table(HTML_ENTITIES);
+		$sText = ereg_replace("[\r\n\t]", "", $sHtml); // Meaningless HTML white spaces
+		$sText = ereg_replace("<br( ?/)?>", "\n", $sText); // Line break
+		$sText = ereg_replace("</(tr|div)>", "\n", $sText); // New line
+		$sText = ereg_replace("</(td|th)>", " ", $sText); // Add space between table columns
+		$sText = ereg_replace("<li[^>]*>", "- ", $sText); // Bullet list item
+		$sText = strip_tags($sText);
+		$sText = strtr($sText, array_flip($dHtmlEntities));
+		return ($sText);
+	}
+	
+	// Test whether $sValue is empty or not, return $sElseValue if so
+	function ifEmpty($sValue, $sElseValue = "")
+	{
+		return (!empty($sValue)) ? $sValue : $sElseValue;
+	}
+	
+	// Test against variable type and return $sElseValue on failure
+	// Returns corresponding default type value if $sElseValue is not specified
+	function ifNotType($sValue, $sType, $sElseValue = "__undefined__")
+	{
+		$sType = strToLower($sType);
+		$sTypeFunc = "is_" . $sType;
+		if (function_exists($sTypeFunc)) {
+			if (!$sTypeFunc($sValue)) {
+				if ($sElseValue == "__undefined__") {
+					if ($sType == "array") {
+						return array();
+					} elseif (ereg("^(int(eger)?|long|double|float|real|numeric)$", $sType)) {
+						return 0;
+					} elseif ($sType == "bool") {
+						return false;
+					} elseif ($sType == "object") {
+						return new stdClass;
+					} elseif ($sType == "resource") {
+						return false;
+					} else {
+						return "";
+					}
+				} else {
+					return $sElseValue;
+				}
+			}
+		}
+		return $sValue;
+	}
+	
+	// Check if the current script ($sFile) is included or standalone
+	// Proper usage: isInclude(__FILE__);
+	function isInclude($sFile)
+	{
+		return ($sFile != getEnv("SCRIPT_FILENAME"));
+	}
+	
+	// Check if $sFileName has already been included or required;
+	// returns TRUE if included or required, otherwise returns FALSE
+	function includeExists($sFileName="") {
+		$sFileName = ($sFileName == "") ? getEnv("SCRIPT_NAME") : $sFileName;
+		
+		$aIncludedFiles = get_included_files();
+		foreach ($aIncludedFiles as $sIncludedFile) {
+			if (ereg($sIncludedFile, $sFileName)) {
+				return (true);
+			}
+		}
+		return (false);
+	}
+	
+	function insertToHtmlTag($sHtml, $sInsertText, $sPosition = "", $aTagList = "")
+	{
+		$aPositions = array("before", "after");
+		$aTagList = ifNotType($aTagList, "array");
+		// Quote tag value
+		array_walk($aTagList, create_function('&$sValue', '$sValue = preg_quote($sValue);'));
+		$sPosition = strToLower($sPosition);
+		$sPosition = (in_array($sPosition, $aPositions)) ? $sPosition : "after";
+		$sEregList = (sizeof($aTagList) > 0) ? join("|", $aTagList) : ".+";
+		if ($sPosition == "before") {
+			return ereg_replace("(<(" . $sEregList.  ")( [^>]*)?/?>)", $sInsertText . "\\1", $sHtml);
+		} else {
+			return ereg_replace("(<(" . $sEregList.  ")( [^>]*)?/?>)", "\\1" . $sInsertText, $sHtml);
+		}
+	}
+	
+	// Replace template string (with {{ and }} variable quotations) with variables
+	// and mail out to recipients
+	function mailTemplate($sTo, $sSubject = "", $sBody = "", $sHeaders = "", $dVars = "")
+	{
+		$dVars = (is_array($dVars)) ? $dVars : array();
+		$sTo = replaceVars($sTo, $dVars);
+		$sSubject = replaceVars($sSubject, $dVars);
+		// If sBody is a path to physical file
+		//if (eregi("^[-a-z0-9\\._/]+$", $sBody) && is_file($sBody)) {		
+		if (is_file($sBody)) {
+			$sBody = join("", @file($sBody));
+		}
+		$sBody = replaceVars($sBody, $dVars);
+		$sHeaders = replaceVars($sHeaders, $dVars);
+		return mail($sTo, $sSubject, $sBody, $sHeaders);
+	}
+	
+	function mapHtmlTags($sString, $sTarget = "_self") {
+		$sString = eregi_replace(PATTERN_URI, '<a href="\\0" target="' . $sTarget . '">\\0</a>', $sString);
+		$sString = mapEmailTags($sString);
+		$sString = ereg_replace("\n", "<br />", $sString);
+		return $sString;
+	}
+	
+	// Map e-mail address tags
+	function mapEmailTags($sString) {
+		$sResult = eregi_replace(PATTERN_EMAIL, '<a href="mailto:\\0">\\0</a>', $sString);
+		return ($sResult);
+	}
+	
+	// Mask string value
+	// sValue - The unmasked value
+	// iMaskStart - Starting position of mask
+	// iMaskLength - Length of masking on sValue
+	// iMaskDisplayLength - Length of mask to be displayed. It would be helpful
+	//		to prevent revealling the actual length of the original value.
+	//		Values like user password and credit card number
+	// sMaskString - Mask string
+	function maskString($sValue, $iMaskStart = "", $iMaskLength = "", $iMaskDisplayLength = "", $sMaskString = "")
+	{
+		$iLength = strLen($sValue);
+		$iMaskStart = (!validateVar($iMaskStart, "int") || $iMaskStart < 0 || $iMaskStart > $iLength) ? 0 : $iMaskStart;
+		$iMaskLength = (!validateVar($iMaskLength, "int") || $iMaskLength < 0 || $iMaskLength + $iMaskStart > $iLength) ? $iLength - $iMaskStart : $iMaskLength;
+		$sMaskString = ($sMaskString) ? substr($sMaskString, 0, 1) : "*";
+		$sMask = "";
+		if ($sValue != "") {
+			$iMaskDisplayLength = (!validateVar($iMaskDisplayLength, "int") || $iMaskDisplayLength <= 0) ? $iMaskLength : $iMaskDisplayLength;
+			$sMask = str_repeat($sMaskString, $iMaskDisplayLength);
+			$sVisibleLeft = substr($sValue, 0, $iMaskStart);
+			$sVisibleRight = substr($sValue, $iMaskStart + $iMaskLength, $iLength - ($iMaskStart + $iMaskLength));
+			$sMask = $sVisibleLeft . $sMask . $sVisibleRight;
+		}
+		return $sMask;
+	}
+	
+	// Create directory and its parent folder
+	function mkDirTree($sPath, $iPermission)
+	{
+		$sPath = resolvePath($sPath);
+		$aPaths = explode("/", $sPath);
+		for ($p=sizeof($aPaths)-1;$p>0;$p--) {
+			$aCurrentPaths = $aPaths;
+			$aNewPaths = array_splice($aCurrentPaths, $p, sizeof($aPaths) - $p);
+			$sCurrentPath = join("/", $aCurrentPaths);
+			if (is_dir($sCurrentPath)) {
+				foreach ($aNewPaths as $sNewPath) {
+					$sCurrentPath .= "/" . $sNewPath;
+					if (!is_dir($sCurrentPath)) {
+						if (!mkdir($sCurrentPath, $iPermission)) {
+							return false;
+						}
+					}
+				}
+				return true;
+			}
+		}
+		return false;
+	}
+	
+	// Parse CSS (version 1) codes into array structure
+	// Returning array has two major categories "tags" and "classes", and property names and
+	// values are stored in associate array style (property name as array key and property
+	// value as array value).
+	// If class definition is related to specific tags (ie, font.class1), such class would be
+	// grouped under "tags" element. For instance, the following CSS code
+	//
+	//		font { color : #ffffff }
+	//		font.class1 { font-family : Arial; font-size : 10pt }
+	//		a { text-decoration : none }
+	//		.class2 {
+	//			line-height : 12pt;
+	//		}
+	//
+	// would return array structure as followed
+	//		array(
+	//			"tags" => array(
+	//				"font" => array(
+	//					"color" => "#ffffff",
+	//					"classes" => array(
+	//						"class1" => array(
+	//							"font-family" => "Arial",
+	//							"font-size" => "10pt"
+	//						)
+	//					)
+	//				),
+	//				"a" => array(
+	//					"text-decoration" => "none"
+	//				)
+	//			),
+	//			"classes" => array(
+	//				"class2" => array(
+	//					"line-height" => "12pt"
+	//				)
+	//			)
+	//		);
+	function parseCss1($sContent)
+	{
+		$dCss = array();
+		// Flatten codes
+		$sContent = ereg_replace("[\n\r]", "", $sContent);
+		$sContent = ereg_replace("/\\*[^\\*]*\\*/", "", $sContent);
+		if (preg_match_all("/([^{]+){([^}]*)}/", $sContent, $aMatches, PREG_SET_ORDER)) {
+			foreach ($aMatches as $aMatchSet) {
+				list($sDump, $sIdentifiers, $sStatements) = $aMatchSet;
+				$aIdentifiers = split("[ \t]*,[ \t]*", trim($sIdentifiers));
+				$aStatements = split("[ \t]*;[ \t]*", trim($sStatements));
+				$dProps = array();
+				foreach ($aStatements as $sStatement) {
+					list($sPropName, $sPropValue) = split("[ \t]*:[ \t]*", trim($sStatement));
+					$sPropName = trim($sPropName);
+					if ($sPropName != "") {
+						$dProps[$sPropName] = trim($sPropValue);
+					}
+				}
+				foreach ($aIdentifiers as $sIdentifier) {
+					$sIdentifier = trim($sIdentifier);
+					ereg("^([^\\.]*)\\.?(.*)", $sIdentifier, $aIdentifierMatches);
+					list($sDump, $sTag, $sClass) = $aIdentifierMatches;
+					if ($sTag) {
+						$sTag = strToLower($sTag);
+						if ($sClass) {
+							$dCss["tags"][$sTag]["classes"][$sClass] = array_merge(ifNotType($dCss["tags"][$sTag]["classes"][$sClass], "array"), $dProps);
+						} else {
+							$dCss["tags"][$sTag] = array_merge(ifNotType($dCss["tags"][$sTag], "array"), $dProps);
+						}
+					} elseif ($sClass) {
+						$dCss["classes"][$sClass] = array_merge(ifNotType($dCss["classes"][$sClass], "array"), $dProps);
+					}
+				}
+			}
+		}
+		return $dCss;
+	}
+	
+	// Parse given HTML code into array structure
+	// If setting bStrict to true, XHTML validation would be implemented; meaning no
+	// optional closing tags should be missed.
+	// By default, with no bStrict, function yields common used as-is-empty-set tags such as <img>
+	function parseHtml($sContent, $bStrict = false)
+	{
+		$aEmptySets = array("!doctype");
+		if (!$bStrict) {
+			array_push($aEmptySets, "img", "link", "br", "meta", "hr", "input", "area", "param");
+		}
+		$dTags = array();
+		$iLevel = 0;
+		$sWorkingContent = preg_replace('/"([^"]*)"/ie', '"\\"" . htmlEntities("\\1") . "\\""', $sContent);
+		// Ignore comments
+		$sWorkingContent = preg_replace('/<!--.+-->/', "", $sWorkingContent);
+		$sRest = "";
+		$sRefName = '$dTags';
+		$aElementIndexes = array(0);
+		while (true) {
+			$dElement = array();
+			if (preg_match('/^\s*<([^\\/\s>]+)([^>]*)>/i', $sWorkingContent, $aMatches)) {
+				// Element start
+				$sWholeTag = trim($aMatches[0]);
+				$sTag = $aMatches[1];
+				$sAttr = trim(preg_replace('/\\/$/', "", $aMatches[2]));
+				$dElement["type"] = "node";
+				$dElement["name"] = $sTag;
+				if ($sAttr != "") {
+					$dElement["attributes"] = parseHtmlAttributes($sAttr);
+				}
+				$sRef = $sRefName . _parseHtml_getRefPath($aElementIndexes, $iLevel);
+				$bEmptySet = (preg_match('/\\/>/', $sWholeTag) || in_array(strToLower($sTag), $aEmptySets));
+				if ($bEmptySet) {
+					// If this is an empty set element, do not create nodes group
+					// Remain in the current level
+					$aElementIndexes[$iLevel] ++;
+				} else {
+					// If element is not an empty set element, advance one level
+					// Create node group for children
+					$dElement["nodes"] = array();
+					// Enter one level
+					$iLevel ++;
+					$aElementIndexes[$iLevel] = 0;
+				}
+				eval($sRef . ' = $dElement;');
+				// Remove scanned tag from the begining
+				$sWorkingContent = preg_replace('/^\s*<[^>]+>/i', "", $sWorkingContent, 1);
+			} elseif (preg_match('/^\s*<\\/([^>]+)>/i', $sWorkingContent, $aMatches)) {
+				// Element end
+				$sWholeTag = trim($aMatches[0]);
+				$sTag = $aMatches[1];
+				$sRef = $sRefName . _parseHtml_getRefPath($aElementIndexes, $iLevel - 1);
+				eval('$dElement =& ' . $sRef . ';');
+				// Check tag integrity, is it really closing the correct tag at the same level?
+				// If not, ignore this closing tag
+				if (strToLower($dElement["name"]) == strToLower($sTag)) {
+					// Because every element or text node detection would advance one index,
+					// the last index before end tag must be an extra
+					$aElementIndexes[$iLevel] --;
+					$sRef = $sRefName . _parseHtml_getRefPath($aElementIndexes, $iLevel);
+					// Remove unnecessary empty nodes
+					if (is_array($dElement["nodes"])) {
+						$aElementNodes = array_values($dElement["nodes"]);
+						if (sizeof($dElement["nodes"]) == 0 || !$aElementNodes[0]) {
+							unset($dElement["nodes"]);
+						}
+					}
+					// Remove current level index
+					unset($aElementIndexes[$iLevel]);
+					// Exit one level
+					$iLevel --;
+					// Advance one index on current level
+					$aElementIndexes[$iLevel] ++;
+					$sRef = preg_replace('/\\[[0-9]+\\]$/', "", $sRef, 1);
+				}
+				unset($dElement);
+				$sWorkingContent = preg_replace('/^\s*<\\/[^>]+>/i', "", $sWorkingContent, 1);
+			} elseif (preg_match('/^([^<]+)/', $sWorkingContent, $aMatches)) {
+				// Text node
+				$sText = trim($aMatches[1]);
+				$iElementIndex = ($aElementIndexes[$iLevel]) ? $aElementIndexes[$iLevel] : 0;
+				$sRef = $sRefName . _parseHtml_getRefPath($aElementIndexes, $iLevel);
+				$dElement = array(
+					"type" => "text",
+					"data" => htmlDecodeEntities($sText)
+				);
+				eval($sRef . ' = $dElement;');
+				$aElementIndexes[$iLevel] ++;
+				$sWorkingContent = preg_replace('/^\s*[^<]+/i', "", $sWorkingContent, 1);
+			} elseif ($sWorkingContent == "") {
+				// Parse code until there is nothing left
+				break;
+			}
+			$sWorkingContent = trim($sWorkingContent);
+		}
+		return $dTags;
+	}
+	
+		function _parseHtml_getRefPath($aElementIndexes, $iTargetLevel = null)
+		{
+			$iTargetLevel = (is_int($iTargetLevel) && $iTargetLevel < sizeof($aElementIndexes)) ? $iTargetLevel : sizeof($aElementIndexes) - 1;
+			// >
+			$aElementIndexes = array_slice($aElementIndexes, 0, $iTargetLevel + 1);
+			$sPath = '[' . join(']["nodes"][', $aElementIndexes) . ']';
+			return $sPath;
+		}
+	
+	function parseHtmlAttributes($sAttr)
+	{
+		$dAttr = array();
+		$sAttr = trim($sAttr);
+		preg_match_all('/([^\s]+)(\s*=\s*("[^"]*"|\'[^\']*\'|[^\s]+))?/', $sAttr, $aMatches);
+		foreach ($aMatches[0] as $sPair) {
+			//$aPair = split("=", $sPair, 2);
+			$aPair = preg_split("/=/", $sPair, 2);
+			list($sName, $sValue) = $aPair;
+			$sName = trim($sName);
+			if ($sName != "") {
+				if (sizeof($aPair) == 1) {
+					$sValue = null;
+				} else {
+					$sValue = trim($sValue);
+				//	$sValue = ereg_replace("^[\"']", "", $sValue);
+					//$sValue = ereg_replace("[\"']$", "", $sValue);
+					$sValue = preg_replace("/^[\"']/", "", $sValue);
+					$sValue = preg_replace("/[\"']$/", "", $sValue);
+					$sValue = htmlDecodeEntities($sValue);
+				}
+				if (!isset($dAttr[$sName])) {
+					$dAttr[$sName] = $sValue;
+				}
+			}
+		}
+		return $dAttr;
+	}
+	
+	// Redirect to another page
+	// If Replace set to TRUE, it will issue JavaScript command
+	// "location.replace" to replace the current location with specified URL
+	function redir($sUrl, $bReplace = false) {
+		global $_SESSION;
+		$_SESSION['returnTo'] = $_SERVER['REQUEST_URI'];
+		if (!headers_sent() && !$bReplace) {
+			header("Location: " . $sUrl);
+			exit;
+		} else {
+			$sJs = ($bReplace) ? 'top.location.replace("%s")' : 'top.location.href = "%s"';
+?>
+<script language="JavaScript">
+<!--
+	<?php echo sprintf($sJs, $sUrl) ?>;
+//-->
+</script>
+<?php
+		}
+	}
+	
+	// Replace array key names in string (enclosed by {{ and }}) by their value
+	function replaceVars($sString, $dVars)
+	{
+		$dVars = (is_array($dVars)) ? $dVars : array();
+		return preg_replace("/\\{\\{(\w+)\\}\\}/e", '$dVars["\\1"]', $sString);
+	}
+	
+	function reportErrorSet($dProps)
+	{
+		$GLOBALS["_ERROR_PROPS"] = $dProps;
+	}
+	
+	function reportError($sError = "", $sFileName = "", $iLine = -1, $dErrProps = array())
+	{
+		global $_ERROR_PROPS, $HTTP_COOKIE_VARS;
+		$dErrProps = (is_array($dErrProps)) ? $dErrProps : array();
+		$dProps = (is_array($_ERROR_PROPS)) ? $_ERROR_PROPS : array();
+		$dProps = array_merge($dProps, $dErrProps);
+		$sRecipient = $dProps["recipient"];
+		if ($sError && $sRecipient) {
+			$sTab = "    ";
+			$sHost = getEnv("HTTP_HOST");
+			$sScriptName = getEnv("SCRIPT_NAME");
+			$sProtocol = (getEnv("HTTPS")) ? "https" : "http";
+			$sURL = $sProtocol . "://" . $sHost . $sScriptName;
+			$aaDate = getDate(time());
+			$sLine = ($iLine != -1) ? " [L" . $iLine . "]" : "";
+			$dMsg["Error Report"] = array(
+				"Date" => date("F m, Y"),
+				"Time" => date("h:ia"),
+				"Website" => $sHost,
+				"Script" => $sScriptName,
+				"Originate" => $sFileName . $sLine,
+				"URL" => $sURL
+			);
+			if (getEnv("HTTP_X_FORWARDED_FOR")) {
+				$dMsg["User Information"]["Remote Address"] = getEnv("HTTP_X_FORWARDED_FOR");
+				$dMsg["User Information"]["Proxy Host"] = getEnv("HTTP_VIA");
+				$dMsg["User Information"]["Proxy Address"] = getEnv("REMOTE_ADDR");
+			} else {
+				$dMsg["User Information"]["Remote Address"] = getEnv("REMOTE_ADDR");
+			}
+			$dMsg["User Information"]["User Agent"] = getEnv("HTTP_USER_AGENT");
+			$dFormVars = $GLOBALS["HTTP_" . strToUpper(getEnv("REQUEST_METHOD")) . "_VARS"];
+			if (sizeof(array_keys($dFormVars)) > 0) {
+				foreach ($dFormVars as $sKey => $sValue) {
+					$dMsg[getEnv("REQUEST_METHOD") . " Request Information"][$sKey] = $sValue;
+				}
+			}
+			if (sizeof($HTTP_COOKIE_VARS) > 0) {
+				$dMsg["Client Cookie Information"] = $HTTP_COOKIE_VARS;
+			}
+			$dMsg["Error Message"] = $sError;
+			$aMsg = array();
+			foreach ($dMsg as $sSection => $dSection) {
+				$aMsg[] = "[ " . $sSection . " ]";
+				$aMsg[] = "";
+				if ($sSection == "Error Message") {
+					$aMsg[] = $sError;
+				} else {
+					foreach ($dSection as $sName => $sValue) {
+						if (is_array($sValue)) {
+							$aMsg[] = $sTab . $sName . " :: ";
+							foreach ($sValue as $sSubName => $sSubValue) {
+								$aMsg[] = str_repeat($sTab, 2) . $sSubName . " = " . $sSubValue;
+							}
+						} else {
+							$aMsg[] = $sTab . $sName . " :: " . $sValue;
+						}
+					}
+				}
+				$aMsg[] = "";
+			}
+			$aHeaders[] = "From: Error Reporter<info@" . $sHost . ">";
+			$aHeaders[] = "X-Reporter: Error Reporter";
+			mail($sRecipient, "Error Report From [" . $sURL . "]", join("\n", $aMsg), join("\n", $aHeaders));
+		}
+	}
+	
+	// Resolve path with double slashes, /. and /.. literally (would not resolve symbolic links)
+	function resolvePath($sOrigPath)
+	{
+		$sPath = ereg_replace("/+", "/", $sOrigPath);
+		$aPaths = explode("/", $sPath);
+		$aRealPaths = array();
+		for ($p=sizeof($aPaths)-1;$p>0;$p--) {
+			$sPath = $aPaths[$p];
+			if ($sPath == "..") {
+				$p --;
+			} elseif ($sPath != ".") {
+				$aRealPaths[] = $sPath;
+			}
+		}
+		if (ereg("^/", $sOrigPath)) {
+			$aRealPaths[] = "";
+		}
+		return join("/", array_reverse($aRealPaths));
+	}
+	
+	function reSubmitForm($sMethod = "", $sHost = "", $bSecure = false)
+	{
+		$sMethod = (eregi("^(get|post)$", $sMethod)) ? strToUpper($sMethod) : "GET";
+		$sHost = ifEmpty($sHost, getEnv("HTTP_HOST"));
+		$sProtocol = ($bSecure) ? "https" : "http";
+		if ($sMethod == "POST") {
+			// If Post, create HTML and re-post query-string to script as hidden fields
+			// Note: "file upload" is not supported
+			$dFormArray = formArray();
+			$sHiddenFields = "";
+			foreach ($dFormArray as $sKey => $sValue) {
+				$sHiddenFields .= getHtmlTag("input", array("type" => "hidden", "name" => $sKey, "value" => $sValue));
+			}
+			$sForm = getHtmlTag("form", array("action" => $sProtocol . "://" . $sHost . getEnv("SCRIPT_NAME"), "method" => "post", "name" => "frm"), $sHiddenFields);
+			$sBody = getHtmlTag("body", array("onload" => "document.frm.submit()"), $sForm);
+			$sTitle = getHtmlTag("title", "", "Redirecting...");
+			$sHeader = getHtmlTag("head", "", $sTitle);
+			$sHtml = getHtmlTag("html", "", $sHeader . $sBody);
+			print $sHtml;
+			exit;
+		} else {
+			redir($sProtocol . "://" . $sHost . getEnv("REQUEST_URI"));
+		}
+	}
+	
+	// Send cookie headers to browser, while updating HTTP_COOKIE_VARS at the
+	// same time
+	function sendCookie($sCookieName, $sCookieValue="", $iExpire=0, $sPath="", $sDomain="", $iSecure=0) {
+		global $HTTP_COOKIE_VARS;
+		
+		if (!headers_sent()) {
+			setCookie($sCookieName, $sCookieValue, $iExpire, $sPath, $sDomain, $iSecure);
+			$HTTP_COOKIE_VARS[$sCookieName] = $sCookieValue;
+		}
+	}
+	
+	// Explicitly set request variable, regardless of request method.
+	// Which value can be retrieved using formVar()
+	function setFormVar($sFormKey, $sFormIndex, $sFormValue = NULL)
+	{
+		$vForm =& $GLOBALS["HTTP_" . strToUpper(getEnv("REQUEST_METHOD")) . "_VARS"][$sFormKey];
+		if ($sFormValue !== NULL) {
+			$vForm[$sFormIndex] = $sFormValue;
+		} else {
+			$vForm = $sFormIndex;
+		}
+	}
+	
+	// Convert special characters ["'<>&] into HTML entities
+	// and newline character to <br />
+	function textToHtml($sText, $bAllowTags=false) {
+		$sHtml = htmlEntities($sText);
+		if ($bAllowTags) {
+			$sHtml = eregi_replace("&lt;(p|br|b|i|u|s|strong|em|strike|sub|sup)&gt;", "<\\1>", $sHtml);
+		}
+		$sHtml = ereg_replace("\n", "<br />", $sHtml);
+		return ($sHtml);
+	}
+	
+	// Incorporate array elements into table cell layout by calling a callback function
+	// describing each element in TD tags
+	// ** Output only TR and TD tags. This function shouldn't involve outter table attributes
+	//    like cell padding nor spacing to remain flexibility
+	// Callback function arguements
+	// 		Callback_Name($sValue[, $sKey [, $iCurrentColumnIndex]])
+	// Tiling engine will skip current column (including column count) when callback function returns FALSE
+	function tileArray($aArray, $sCallback, $iRowItems = 2, $dTrAttr = "")
+	{
+		if (is_array($aArray) && function_exists($sCallback)) {
+			$dTrAttr = ifNotType($dTrAttr, "array");
+			// Detect columns by test-run the function
+			ob_start();
+			$sCallback("", "", -1);
+			$sItemOutput = ob_get_contents();
+			ob_end_clean();
+			$dTags = parseHtml($sItemOutput);
+			$iItemCols = 0;
+			foreach ($dTags as $dTag) {
+				if (isset($dTag["name"]) && strToLower($dTag["name"]) == "td") {
+					$iItemCols ++;
+				}
+			}
+			if ($iItemCols > 0) {
+				$iCount = 0;
+				$iCountTotal = sizeof($aArray);
+				$sOutput = "";
+				$sOutputRow = "";
+				foreach ($aArray as $sKey => $sValue) {
+					ob_start();
+					$bResult = $sCallback($sValue, $sKey, $iCount % $iRowItems);
+					$sOutputCol = ob_get_contents();
+					ob_end_clean();
+					// Engine would skip this column if callback function returns false
+					if ($bResult === false) {
+						continue;
+					}
+					$sOutputRow .= $sOutputCol;
+					if ($iCount + 1 == $iCountTotal) {
+						if (($iCount + 1) % $iRowItems != 0) {
+							$sOutputRow .= getHtmlTag("td", array("colspan" => $iItemCols * ($iRowItems - (($iCount + 1) % $iRowItems))), "&nbsp;");
+						}
+						$iCount = $iRowItems - 1;
+					}
+					if (($iCount + 1) % $iRowItems == 0) {
+						$sOutput .= getHtmlTag("tr", $dTrAttr, $sOutputRow);
+						$sOutputRow = "";
+					}
+					$iCount ++;
+				}
+				print $sOutput;
+				return true;
+			}
+		}
+		return false;
+	}
+	
+	// Trim leading and trailing spaces (including HTML break and non-break-space entity) of HTML string
+	function trimHtml($sString)
+	{
+		$sString = preg_replace("/^(<br>|&nbsp;|\s)+/i", "", $sString);
+		$sString = preg_replace("/(<br>|&nbsp;|\s)+$/i", "", $sString);
+		return $sString;
+	}
+	
+	// Remove slashes in a string, reuse in above function
+	function unescapeString($sString) {
+		$sResult = (is_string($sString)) ? ereg_replace("\\\\(.)", "\\1", $sString) : $sString;
+		return ($sResult);
+	}
+	
+	// Remove slashes in form variables,
+	// support variable types [string | array | dictionary (associative array)]
+	function unescapeVar($vVariable) {
+		$vResult = $vVariable;
+		if (is_array($vVariable)) {
+			if (sizeof(array_keys($vVariable)) > 0) {
+				foreach ($vVariable as $sKey => $sValue) {
+					$vResult[$sKey] = unescapeString($sValue);
+				}
+			} else {
+				for ($i=0;$i<sizeof($vVariable);$i++) {
+					$vResult[$i] = unescapeString($vVariable[$i]);
+				}
+			}
+		} elseif (is_string($vVariable)) {
+			$vResult = unescapeString($vVariable);
+		}
+		return ($vResult);
+	}
+	
+	// Unlink files and folders recursively
+	function unlinkTree($sPath, &$aErrors)
+	{
+		$aErrors = walkDir(
+			$sPath,
+			array(
+				"closedir" => "_unlinkTree_closeDir",
+				"file" => "_unlinkTree_file"
+			)
+		);
+		return (!sizeof($aErrors));
+	}
+	
+		function _unlinkTree_file($sPath)
+		{
+			if (!@unlink($sPath)) {
+				return "Unable to remove file [" . $sPath . "]";
+			}
+		}
+		
+		function _unlinkTree_closeDir($sPath)
+		{
+			if (!@rmDir($sPath)) {
+				return "Unable to remove folder [" . $sPath . "]";
+			}
+		}
+	
+	function urlAddQueryStrings($sUrl, $dNewQueryStrings)
+	{
+		// Parse URL and gather all information in variables first
+		list($sPath, $sQueryString) = explode("?", $sUrl);
+		$dQueryStrings = urlParseQueryString($sQueryString);
+		// Add new query strings
+		if (is_string($dNewQueryStrings)) {
+			$dNewQueryStrings = urlParseQueryString($dNewQueryStrings);
+		}
+		if (is_array($dNewQueryStrings)) {
+			$dQueryStrings = array_merge($dQueryStrings, $dNewQueryStrings);
+			$aQueryStringPairs = array();
+			foreach ($dQueryStrings as $sKey => $sValue) {
+				if ($sKey !== "") {
+					$aQueryStringPairs[] = urlEncode($sKey) . "=" . urlEncode($sValue);
+				}
+			}
+			if (sizeof($aQueryStringPairs) > 0) {
+				$sUrl = $sPath . "?" . join("&", $aQueryStringPairs);
+			}
+		}
+		return $sUrl;
+	}
+	
+	function urlParseQueryString($sQueryString)
+	{
+		$dQueryStrings = array();
+		$aQueryStringPairs = explode("&", $sQueryString);
+		foreach ($aQueryStringPairs as $sQueryStringPair) {
+			if ($sQueryStringPair != "") {
+				list($sKey, $sValue) = explode("=", $sQueryStringPair);
+				$sKey = urlDecode($sKey);
+				$sValue = urlDecode($sValue);
+				$dQueryStrings[$sKey] = $sValue;
+			}
+		}
+		return $dQueryStrings;
+	}
+	
+	// Validate Posted Form entries
+	// Returns the first error message, if error occurs
+	// $dFieldProperties is a dictionary variable consists of the following
+	// 	array(
+	//		<field name> = array(
+	//			"name"			=>	<display name of field>,
+	//			"required"		=>	<boolean, whether this field is required or not>,
+	//			"type"			=>	<type of variable, according to validateVar() function>,
+	//			"error"			=>	<custom default error message, by default is "Please enter [field name]">
+	//			"type error"	=>	<custom variable type error message, by default is "Please enter [field name] in correct format">
+	//			"autocorrect"	=>	<auto-correct value, depending on variable type>
+	//									"all cap" 	- string	- capitalize all characters
+	//									"word cap"	- string	- capitalize first character of each word only
+	//									"currency"	- float		- convert to 0,000.00 format
+	//		) [, ...]
+	//	);
+	function validateForm($dFieldsProperties, $dFormVars="") {	
+		global $_POST, $_GET, $_REQUEST;
+		
+		// Optionally pass external dictionary variable, by reference, for validation
+		if (!is_array($dFormVars) || sizeof(array_keys($dFormVars)) == 0) {
+		//	$sFormVarsName = "HTTP_" . strToUpper(getEnv("REQUEST_METHOD")) . "_VARS";
+			$sFormVarsName = "_" . strToUpper(getEnv("REQUEST_METHOD")) ;
+			$dFormVars = &$$sFormVarsName;
+		}
+		foreach ($dFieldsProperties as $sFieldName => $dField) {
+		//	$aArgs = array($dFormVars[$sFieldName], $dField["type"]);
+			$aArgs = array($_REQUEST[$sFieldName], $dField["type"]);
+			if (ereg("^[pe]reg$", $dField["type"])) {
+				$aArgs[] = $dField["ereg_pattern"];
+			}
+			//if (trim($dFormVars[$sFieldName]) != "" && !call_user_func_array("validateVar", $aArgs)) {
+			if (trim($_REQUEST[$sFieldName]) != "" && !call_user_func_array("validateVar", $aArgs)) {
+				if (isset($dField["type_error"]) && $dField["type_error"]) {
+					return (preg_replace("/\\{\\{(\w+)\\}\\}/ie", '$dField["\\1"]', $dField["type_error"]));
+				} else {
+					return ("Please enter " . $dField["name"] . " in correct format");
+				}
+			}
+			if ($dField["required"]) {
+				//if (trim($dFormVars[$sFieldName]) == "") {
+				if (trim($_REQUEST[$sFieldName]) == "") {
+					if (isset($dField["error"]) && $dField["error"]) {
+						return (preg_replace("/\\{\\{(\w+)\\}\\}/ie", '$dField["\\1"]', $dField["error"]));
+					} else {
+						return ("Please enter " . $dField["name"]);
+					}
+				}
+			}
+			// Auto-correct, see above for details
+			if (isset($dField["autocorrect"]) && $dField["autocorrect"]) {
+				switch ($dField["type"]) {
+					case "string":
+						switch ($dField["autocorrect"]) {
+							case "all cap":
+								$dFormVars[$sFieldName] = strToUpper($dFormVars[$sFieldName]);
+								$_REQUEST[$sFieldName] = strToUpper($_REQUEST[$sFieldName]);
+								break;
+							case "word cap":
+								$_REQUEST[$sFieldName] = uCWords($_REQUEST[$sFieldName]);
+								break;
+						}
+						break;
+					case "float":
+						switch ($dField["autocorrect"]) {
+							case "currency":
+								$_REQUEST[$sFieldName] = sprintf("%.2f", $_REQUEST[$sFieldName]);
+								break;
+						}
+						break;
+				}
+			}
+		}
+		return ("");
+	}
+	
+	// Validate User Input
+	// Return boolean of whether error occurs or not
+	// Array of errors are passed as reference in argument list, indicates affecting field name and its error message
+	// $dFieldProperties is a dictionary variable consists of the following
+	// 	array(
+	//		<field name> = array(
+	//			"name"			=>	<display name of field>,
+	//			"required"		=>	<boolean, whether this field is required or not>,
+	//			"type"			=>	<type of variable, according to validateVar() function>,
+	//			"error"			=>	<custom default error message, by default is "Please enter [field name]">
+	//			"type error"	=>	<custom variable type error message, by default is "Please enter [field name] in correct format">
+	//          "match error"   =>  <custom variable compare error message, by default is "Unmatch [field name] and [compare_to field name]">
+	//		) [, ...]
+	//	);
+	function validateInput($dFieldsProperties, $aErrors)
+	{
+		$dFormVars = formArray();		
+		$aErrors = array();				
+		foreach ($dFieldsProperties as $sFieldName => $dField) {
+			//$aArgs = isset($dFormVars[$sFieldName]) && isset($dField["type"])  && $dField["type"] ? array($dFormVars[$sFieldName], $dField["type"]) : (isset($dFormVars[$sFieldName]) ? $dFormVars[$sFieldName] : '');
+			$aArgs = isset($dFormVars[$sFieldName]) && isset($dField["type"])  && $dField["type"] ? array($dFormVars[$sFieldName], $dField["type"]) : (isset($dFormVars[$sFieldName]) ? $dFormVars[$sFieldName] : array());
+			//$aArgs =  array($dFormVars[$sFieldName], $dField["type"]);
+			//if (isset($dField["type"]) && ereg("^[pe]reg$", $dField["type"])) {
+			if (isset($dField["type"]) && preg_match("/^[pe]reg$/", $dField["type"])) {
+				$aArgs[] = $dField["ereg_pattern"];
+			}
+			
+			if (isset($dFormVars[$sFieldName]) && trim($dFormVars[$sFieldName]) != "" && !call_user_func_array("validateVar", $aArgs)) {
+			//if (trim($dFormVars[$sFieldName]) != "" && !call_user_func_array("validateVar", $aArgs)) {
+				$aErrors[$sFieldName] = ( isset($dField["type_error"]) && $dField["type_error"]) ?
+					preg_replace("/\\{\\{(\w+)\\}\\}/ie", '$dField["\\1"]', $dField["type_error"])
+					:
+					"Please enter " . $dField["name"] . " in correct format";
+			} elseif ($dField["required"]) {
+				if (trim($dFormVars[$sFieldName]) == "") {
+					$aErrors[$sFieldName] = (isset($dField["error"]) && $dField["error"]) ?
+						preg_replace("/\\{\\{(\w+)\\}\\}/ie", '$dField["\\1"]', $dField["error"])
+						:
+						"Please enter " . $dField["name"];
+				}
+			}
+			//if (isset($dField["type"]) && ereg("strcmp", $dField["type"])) {
+			if (isset($dField["type"]) && preg_match("/strcmp/", $dField["type"])) {
+				if (trim($dFormVars[$sFieldName]) != "" && trim($dFormVars[$dField["compare_to"]]) != "") {
+					if (trim($dFormVars[$sFieldName]) != trim($dFormVars[$dField["compare_to"]]))
+						$aErrors[$dFormVars[$dField["compare_to"]]] = ($dField["match_error"]) ?
+							preg_replace("/\\{\\{(\w+)\\}\\}/ie", '$dField["\\1"]', $dField["match_error"])
+							:
+							"Unmatch " . ucwords($dField["compare_to"]) . " and " . $dField["name"];
+				}
+			}
+		}
+		//return (sizeof($aErrors) == 0);
+		if (sizeof($aErrors) == 0)
+			return true;
+		else return $aErrors;
+	}
+	
+	// Examine variable for correct data type or special pattern
+	// Supprt data types [int | float | string]
+	// Special pattern [email | postal (Canadian postal code) | zip (US, 5 digits or zip+4 code) ]
+	function validateVar($vValue, $sType='', $sRegExp = "") {
+		switch ($sType) {
+			case "int":
+				//$bResult = (ereg("^[0-9]+$", $vValue));
+				//$bResult = (preg_match("/^[0-9]+$/", $vValue));
+				$bResult = filter_var($vValue, FILTER_VALIDATE_INT);
+				break;
+			case "float":
+				//$bResult = (ereg("^[0-9]+(\.[0-9]+)?$", $vValue));
+				//$bResult = (preg_match("/^[0-9]+(\.[0-9]+)?$/", $vValue));
+				$bResult = filter_var($vValue, FILTER_VALIDATE_FLOAT);
+				break;
+			case "email":
+				//$bResult = (eregi("^" . PATTERN_EMAIL . "$", $vValue));
+				//$bResult = (preg_match("/^/" . PATTERN_EMAIL . "$", $vValue));
+				$bResult = filter_var($vValue, FILTER_VALIDATE_EMAIL);
+				break;
+			case "postal":
+				//$bResult = (eregi("^[a-z][0-9][a-z][0-9][a-z][0-9]$", $vValue));
+				$bResult = (preg_match("/^[a-z][0-9][a-z][0-9][a-z][0-9]$/", $vValue));
+				break;
+			case "zip":
+				//$bResult = (ereg("^[0-9]{5}(-[0-9]{4})?$", $vValue));
+				$bResult = (preg_match("/^[0-9]{5}(-[0-9]{4})?$/", $vValue));
+				break;
+			case "phone":
+				//$bResult = (ereg("^(\\([0-9]+\\)[ \\-]?)?[0-9]+(-[0-9]+)*$", $vValue));
+				$bResult = (preg_match("/^(\\([0-9]+\\)[ \\-]?)?[0-9]+(-[0-9]+)*$/", $vValue));
+				break;
+			case "string":
+				$bResult = (getType($vValue) == $sType);
+				break;
+			case "md5":
+				//$bResult = (ereg("^[0-9a-f]{32}$", $vValue));
+				$bResult = (preg_match("/^[0-9a-f]{32}$/", $vValue));
+				break;
+			case "creditcard":
+				$bResult = false;
+				$iSum = 0;
+			    if (strlen($vValue) >= 13) {
+				    for ($i=0;$i<strlen($vValue)-1;$i++) {
+						$iWeight = substr($vValue, -1 * ($i + 2), 1) * (2 - ($i % 2));
+						$iSum += (($iWeight < 10) ? $iWeight : ($iWeight - 9));
+				    }
+				}
+			    if (substr($vValue, -1) == (10 - $iSum % 10) % 10) {
+					$bResult = true;
+				}
+				break;
+			case "ereg":
+			//	$bResult = ($sRegExp) ? ereg($sRegExp, $vValue) : false;
+				$bResult = ($sRegExp) ? preg_match("/".$sRegExp."/", $vValue) : false;
+				break;
+			case "preg":
+				$bResult = ($sRegExp) ? preg_match($sRegExp, $vValue) : false;
+				break;
+			default:
+				$bResult = true;
+		}
+		return ($bResult);
+	}
+	
+	// Walk through directory and files recursively and apply event handler to
+	// perform custom actions
+	// $aEventHandlers consist of the following event (as key) and function's
+	// name (as value); each handler/function contains "path" as the only
+	// argument
+	//   opendir : fires when reaching and entering a directory, and before
+	//       reading the first file
+	//   closedir : fires after all files in directory are read and about to
+	//       leave the directory
+	//   file : fires when reaching each file in directory
+	function walkDir($sPath, $aEventHandlers = "")
+	{
+		$aEvents = array("opendir", "closedir", "file");
+		$aEventHandlers = (is_array($aEventHandlers)) ? $aEventHandlers : array();
+		foreach ($aEventHandlers as $sEvent => $sHandler) {
+			if (!in_array($sEvent, $aEvents) || !function_exists($sHandler)) {
+				unset($aEventHandlers[$sEvent]);
+			}
+		}
+		$aErrors = array();
+		if (sizeof($aEventHandlers) > 0) {
+			$aHandles = array();
+			$sPath = resolvePath($sPath);
+			$sWorkPath = $sPath;
+			if (is_dir($sWorkPath) && ($hHandle = openDir($sWorkPath))) {
+				$iLevel = 0;
+				$aHandles[$iLevel] = $hHandle;
+				$sWorkPath .= "/1";
+				while (true) {
+					if ($sFile = readDir($hHandle)) {
+						$sWorkPath = dirname($sWorkPath) . "/" . $sFile;
+						if (is_dir($sWorkPath) && !ereg("^\\.{1,2}$", basename($sWorkPath))) {
+							if ($hHandle = openDir($sWorkPath)) {
+								$iLevel ++;
+								$aHandles[$iLevel] = $hHandle;
+								$sWorkPath .= "/1";
+								// Fires "opendir" event when entering/opening directory
+								if ($aEventHandlers["opendir"] && ($sError = $aEventHandlers["opendir"](dirname($sWorkPath)))) {
+									$aErrors[] = $sError;
+								}
+							} else {
+								$hHandle = $aHandles[$iLevel];
+								$aErrors[] = "Unable to open folder [" . $sWorkPath . "]";
+							}
+						} elseif (is_file($sWorkPath)) {
+							// Fires "file" event when reaches each file
+							if ($aEventHandlers["file"] && ($sError = $aEventHandlers["file"]($sWorkPath))) {
+								$aErrors[] = $sError;
+							}
+						}
+					} else {
+						closeDir($hHandle);
+						$iLevel --;
+						$sWorkPath = dirname($sWorkPath);
+						// Fires "closedir" event when leaving/closing directory
+						if ($aEventHandlers["closedir"] && ($sError = $aEventHandlers["closedir"]($sWorkPath))) {
+							$aErrors[] = $sError;
+						}
+						if ($iLevel >= 0) {
+							$hHandle = $aHandles[$iLevel];
+						} else {
+							break;
+						}
+					}
+				}
+			} else {
+				$aErrors[] = "Not a directory or cannot be opened [" . $sWorkPath . "]";
+			}
+		}
+		return $aErrors;
+	}
+
+	//return the width="xxx" height="xxx" of images
+	//e.g. $sFile = "/images/logo_address.gif"
+	function setImageDimension($sFile, $iPreferredWidth) {
+		list($iWidth, $iHeight,,$sAttr) = getimagesize($_SERVER['DOCUMENT_ROOT'].$sFile);
+		
+		if ($iWidth > $iPreferredWidth) {
+			$dRatio = $iPreferredWidth / $iWidth;
+			$iAutoHeight = intVal($iHeight * $dRatio);
+		} else {
+			$dRatio = $iPreferredWidth / $iWidth;
+			$iAutoHeight = intVal($iHeight * $dRatio);
+			
+		}
+		return " width='$iPreferredWidth' height='$iAutoHeight' ";
+		
+		return $sAttr;
+	}
+?>

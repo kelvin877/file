@@ -1,0 +1,75 @@
+<html>
+<meta charset="utf-8">
+<body>
+
+<div align="center" style="font-family:Arial, Helvetica, sans-serif">
+
+ 
+ <table border="0" cellpadding="10" cellspacing="0" width="400" align="center" style="text-align:left;line-height:1.4em;background:#25262a;font-family:Arial, Helvetica, sans-serif; color:#adadad">
+ <tr><td align="center">
+ <img width="200" style="max-width:200px;width:200px;margin:20px 0 10px;"  src="https://hr.eseelynx.com/leave/images/{{SITE_LOGO}}" >
+ 
+ </td>
+ </tr>
+ <tr>
+ <th style="display:block;margin:0 0 10px;font-weight:normal;font-size:1.8em;color:#7cb6dc;line-height:1.3;text-align:center;">Leave Application Status
+ </th>
+</tr>
+<tr>
+ <td style="padding:0 30px;">
+<p style="color:#fff; font-family: Helvetica,Arial,sans-serif; font-size:1em; font-stretch:normal; font-weight: 400; line-height: 25px; margin:0; margin-bottom:10px; padding: 0;">
+Dear {{RECEIPIENT_NAME}}</p>
+<p style="font-size:1.3em;"><strong style="color:#fc0">{{DESCRIPTION}}</strong></p>
+
+<strong>Application ID</strong>
+<p style="color:#fff; font-family: Helvetica,Arial,sans-serif; font-size:1.4em; font-stretch:normal; font-weight: 400; line-height: 25px; margin:0; margin-bottom:10px;
+padding: 0; text-align:left">#{{ID}}</p>
+
+
+<strong>Employee Name</strong>
+<p style="color:#fff; font-family: Helvetica,Arial,sans-serif; font-size:1.4em; font-stretch:normal; font-weight: 400; line-height: 25px; margin:0; margin-bottom:10px;
+padding: 0; text-align:left">{{NAME}}</p>
+
+
+<strong>Company</strong>
+<p style="color:#fff; font-family: Helvetica,Arial,sans-serif; font-size:1.4em; font-stretch:normal; font-weight: 400; line-height: 25px; margin:0; margin-bottom:10px;
+padding: 0; text-align:left">{{COMPANY}}</p>
+
+<strong>Employee No.</strong>
+<p style="color:#fff; font-family: Helvetica,Arial,sans-serif; font-size:1.4em; font-stretch:normal; font-weight: 400; line-height: 25px; margin:0; margin-bottom:10px;
+padding: 0; text-align:left">{{EMPLOYEE_NO}}</p>
+
+
+<strong>Leave type</strong>
+<p style="color:#fff; font-family: Helvetica,Arial,sans-serif; font-size:1.4em; font-stretch:normal; font-weight: 400; line-height: 25px; margin:0; margin-bottom:10px;
+padding: 0; text-align:left">{{TYPE_OF_LEAVE}}</p>
+
+<strong>Day taken</strong>
+<p style="color:#fff; font-size:1.4em; font-stretch:normal; font-weight: 400; line-height: 25px; margin:0; margin-bottom:10px;
+padding: 0; text-align:left">{{DAY}}</p>
+
+
+<strong>Duration</strong>
+<p style="color:#fff; font-size:1.4em; font-stretch:normal; font-weight: 400; line-height: 25px; margin:0; margin-bottom:10px;
+padding: 0; text-align:left">{{STARTDATE}} to {{ENDDATE}}</p>
+
+<strong>Remark</strong>
+<p style="color:#fff; font-size:1.4em; font-stretch:normal; font-weight: 400; line-height: 25px; margin:0; margin-bottom:10px;
+padding: 0; text-align:left">{{COMMENT}}</p>
+
+
+<strong>Submit date:</strong>
+<p style="color:#fff; font-size: 20px; font-stretch:normal; font-weight: 400; line-height: 25px; margin:0; margin-bottom:10px;
+padding: 0; text-align:left">{{APPLYDATE}}</p>
+
+</td>
+</tr>
+<tr>
+    	<td style="font-family: Helvetica,Arial,sans-serif;  font-stretch:normal; font-weight:400; line-height: 50px; margin:0; margin-bottom:10px; padding: 0; text-align:center; background-color:#7cb6dc">
+        <a href="{{URL}}" target="_blank" style="color:#fff;font-weight:bold;text-align:center;background-color:#7cb6dc;padding:13px 28px 13px 28px; border:8px solid #7cb6dc; display:block; line-height:27px;text-decoration:none;" >{{BUTTON_NAME}}</a>
+</td>
+</tr>
+</table>
+</div>
+</body>
+</html>

@@ -1,0 +1,26 @@
+<?php
+session_start();
+
+include 'lib.login.php';
+
+
+
+
+session_destroy();
+
+header("Location: login.php");
+
+
+
+
+logout();
+
+
+
+
+
+
+
+
+
+ ?>

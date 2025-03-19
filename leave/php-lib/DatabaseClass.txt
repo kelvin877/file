@@ -1,0 +1,567 @@
+<?php
+//http://phpenthusiast.com/blog/the-singleton-design-pattern-in-php
+
+// https://phpdelusions.net/pdo#in
+/*
+$paramenters = array();
+$database = Database::instance();
+$database->query($sSql);
+$dResult = $database->resultset($parameters);		
+	******* */
+	
+	//include_once getEnv("DOCUMENT_ROOT")."/php-lib/config.php";
+	require_once dirname(__FILE__) ."/config.php";
+	
+	//define("MYSQL_SET_CHARSET", 'utf8');
+	
+	
+	
+// return a PDO connection
+	function getConnection($sHost = DB_HOST, $sUsername = DB_USERNAME, $sPassword = DB_PASSWORD, $sDatabase = DB_DATABASE)	
+	{		
+		// A static variable exists only in a local function scope, but it does not lose its value when program execution leaves this scope. 
+		static $ODB_CACHE;
+		
+		
+		$sToken = md5($sHost . ":" . $sUsername . ":" . $sPassword . ":" . $sDatabase);
+		$ODB_CACHE = (is_array($ODB_CACHE)) ? $ODB_CACHE : array();
+		
+		if (!isset($ODB_CACHE[$sToken]) || !$ODB_CACHE[$sToken]) {
+		/*	$oDB = new CMySQL;		
+			$oDB->_errorReport->to = ERROR_EMAIL;
+			$oDB->host = $sHost;
+			$oDB->username = $sUsername;
+			$oDB->password = $sPassword;
+			if ($oDB->open() && $sDatabase) {
+				//if ($oDB->query("use " . $sDatabase)) {
+				if ($oDB->selectDB($sDatabase)){
+					$ODB_CACHE[$sToken] = $oDB;
+				}
+			}
+			*/
+			$oDB = new DatabaseClass;	
+			$oDB->_host = $sHost;
+			$oDB->_username = $sUsername;
+			$oDB->_password = $sPassword;
+			$oDB->_database = $sDatabase;
+			if ($oDB->makeConnection()) {
+				$ODB_CACHE[$sToken] = $oDB;
+			}
+		}
+		return $ODB_CACHE[$sToken];
+	}
+	
+	
+	
+ class DatabaseClass{
+   // private $_connection;
+  //  private static $_instance = null; //returns
+    public $_host = DB_HOST;
+    public $_username = DB_USERNAME;
+    public $_password = DB_PASSWORD;
+    public $_database = DB_DATABASE;
+	
+	
+	public $dbh;
+	public $strSQL;
+	public $error = '';
+	public $stmt = '';
+	public $row = 0;
+	 /** Returns singleton instance of Database   
+     * @return Database 
+     */
+ /*  public static function instance() {        
+        if ( !isset( self::$_instance ) ) {            
+            self::$_instance = new DatabaseClass();            
+        }        
+        return self::$_instance;
+    }
+	
+	// Hide constructor, protected so only subclasses and self can use   
+    protected function __construct() {
+		//$this->open();
+	}		 
+	*/
+	
+	// Constructor
+	function __construct( $array = "" ){	
+	}
+		
+		
+    // Magic method clone is empty to prevent duplication of connection
+    private function __clone()  {  }
+   
+
+   public function getConnection(){
+	   return $this->dbh;
+   }
+ 
+	public function closeConnection(){
+		$this->dbh->close();
+	}
+	
+	
+	function makeConnection()	{
+		
+		$dsn = "mysql:host=".$this->_host.";dbname=".$this->_database.";charset=utf8";
+		
+		$options = array(
+            //PDO::ATTR_PERSISTENT    => true,
+            PDO::ATTR_ERRMODE       => PDO::ERRMODE_EXCEPTION,
+			PDO::ATTR_EMULATE_PREPARES => false
+        );
+		
+		try{
+			$this->dbh = new PDO($dsn, $this->_username, $this->_password);
+			$this->dbh->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);		
+			$this->dbh->setAttribute(PDO::ATTR_EMULATE_PREPARES, false);
+			
+			return $this->dbh;
+			
+			//$mysqli =  mysqli_connect(DB_HOST, DB_USERNAME, DB_PASSWORD, DB_DATABASE);		
+		}catch(PDOEXception $e){
+			$error_message = "Failed to connect to MySQL in DatabaseClass: " . $e->getMessage() ;
+			$this->sendPDOErrorEmail("Cannot connect to database in DatabaseClass", $error_message);
+			return false;
+		}				      
+	}
+		
+		
+	function isConnected($oDB = '')
+	{
+			try{
+				$oDB = $oDB ? $oDB->getAttribute(PDO::ATTR_DRIVER_NAME) :  $this->dbh->getAttribute(PDO::ATTR_DRIVER_NAME);
+			}catch (PDOException $e) {
+				$error_message = "Error on PDO Database Connection Failed: " . $e->getMessage()  ."\r\n\r\n" ;				
+				$this->sendPDOErrorEmail("Error in ".getEnv("SCRIPT_NAME"), $error_message);			
+			}
+
+			if ($oDB == NULL)
+				return false;
+			else return true;
+			//return ($oDB->socket && is_resource($oDB->socket));
+		}
+		
+
+//	private function prepare($sql){
+	function prepare($sql){
+		$this->strSQL = $sql;
+		if ( $this->dbh){
+			try{
+				$this->stmt = $this->dbh->prepare($sql);
+			}catch (PDOException $e) {
+				$error_message = "Error on PDO MySQL query private function: " . $e->getMessage()  ."\r\n\r\n" . $this->odo_sql_debug($this->strSQL, $parameters);				
+				$this->sendPDOErrorEmail("Error in ".getEnv("SCRIPT_NAME"), $error_message);			
+			}
+		}
+		//print_r($this->stmt);
+	}
+	
+	public function bind($param, $value, $type = null){
+		if (is_null($type)) {
+		  switch (true) {
+			case is_int($value):
+			  $type = PDO::PARAM_INT;
+			  break;
+			case is_bool($value):
+			  $type = PDO::PARAM_BOOL;
+			  break;
+			case is_null($value):
+			  $type = PDO::PARAM_NULL;
+			  break;
+			default:
+			  $type = PDO::PARAM_STR;
+		  }
+		}
+		$this->stmt->bindValue($param, $value, $type);
+
+	}
+	
+	
+	
+	///  for Insert, Update, delete SQL statement
+	// return number of affected rows
+	public function query($sql, $parameters=array()){
+	
+	$dResult = array();
+	$sql = trim($sql);
+	$this->strSQL = $sql;
+	if ( $this->dbh  && $sql != ''){
+		try{
+			
+			$this->stmt= $this->dbh->prepare($sql);
+			if ($this->stmt){
+				
+					if (is_array($parameters) && count($parameters) >0 ){
+						$this->stmt->execute($parameters);
+					}else {
+						$this->stmt->execute();
+					}
+												
+					$rowCount = $this->stmt->rowCount();
+					$this->row = $rowCount;
+						
+					$rawStatement = explode(" ", $sql);
+					$statement = strtolower($rawStatement[0]);
+					
+					//if ( preg_match("/^select/i ", trim($sql))  || preg_match("/^describe/i ", trim($sql)) ){
+					if ($statement == 'select' || $statement == 'show' || $statement == 'call' || $statement == 'describe') {					
+						$dResult = $this->stmt->fetchAll(PDO::FETCH_ASSOC);	
+						$this->stmt->closeCursor();
+						return $dResult;
+
+					} elseif ($statement == 'insert' || $statement == 'update' || $statement == 'delete') {						
+						$this->stmt->closeCursor();
+						return $rowCount;
+					}
+			}else return false;
+		}catch (PDOException $e) {	
+			$release_lock_status ='';
+			if (isset($_SESSION['release_lock_sql']) && trim($_SESSION['release_lock_sql'])){
+				$this->stmt=$this->dbh->prepare($_SESSION['release_lock_sql']);
+				$release_lock_status = "\r\n\r\n" . $_SESSION['release_lock_sql']. "\r\nRelease lock status: ".$this->stmt->execute();
+			}
+			
+			$error_message = "Error on PDO query function: " . $e->getMessage()  ."\r\n\r\n" . $this->odo_sql_debug($this->strSQL, $parameters) ;				
+			$error_message .= $release_lock_status;
+			$this->sendPDOErrorEmail("Error in ".getEnv("SCRIPT_NAME"), $error_message);			
+		}
+	}
+		return false;
+		
+				
+	}
+	
+	
+	
+	// for select SQL statement, returns associative array
+	/*public function resultset($sql, $parameters=array()){
+		$dResult = array();
+		
+		if (trim($sql) != ''){
+			$this->execute($sql, $parameters);
+			
+			if ($this->stmt){
+				try{	
+						$dResult = $this->stmt->fetchAll(PDO::FETCH_ASSOC);	
+						$this->stmt->closeCursor();
+					}
+				catch (PDOException $e) {
+					$error_message = "Error on PDO MySQL resultset function: " . $e->getMessage()  ."\r\n\r\n" . $this->odo_sql_debug($this->strSQL, $parameters);				
+					$this->sendPDOErrorEmail("Error in ".getEnv("SCRIPT_NAME"), $error_message);			
+				}
+			}
+		}
+
+		return $dResult;
+	}*/
+	
+	
+	/// return a single row result
+	 public function single(){
+		$this->execute();
+		if ($this->stmt){
+			return $this->stmt->fetch(PDO::FETCH_ASSOC);
+		}else false;
+	}
+	
+	public function rowCount(){
+		if ($this->stmt){
+			return $this->stmt->rowCount();
+		}else return false;
+	}
+	
+	public function lastInsertId(){
+		try{
+			return $this->dbh->lastInsertId();
+		}catch(PDOEXception $e){
+			$error_message = "Failed to get last insert ID by PDO: (" . $e->getMessage() . ") " .$e->getMessage();
+			$this->sendPDOErrorEmail("Fail to get last insert ID", $error_message);
+		}				
+	}
+	
+		
+	public function transaction($sql_list = array(), $parameters= array()){
+		$dResult = array();
+		$this->strSQL = $sql;
+		if ( $this->dbh  && is_array($sql_list)){
+			try{				
+				
+				$this->beginTransaction();
+				
+				if (count($sql_list) >0){
+					foreach($sql_list as $k => $sql){
+						$this->stmt= $this->dbh->prepare($sql);
+						if (is_array($parameters[$k]) && count($parameters[$k]) >0 ){
+							$this->stmt->execute($parameters[$k]);
+						}else {
+							$this->stmt->execute();
+						}
+
+						$rawStatement = explode(" ", $sql);
+						$statement = strtolower($rawStatement[0]);					
+						if ($statement === 'insert' ) {
+							$lastinsertID =  $this->lastInsertId();							
+						}
+					
+					
+					}
+				}
+				$this->commit();
+				return true;
+				
+			}catch (PDOException $e) {
+				$this->cancelTransaction();
+				for($a=0; $a<=$i; $a++){
+					$t .= $this->odo_sql_debug($sql_list[$a], $parameters[$a]) ."\r\n\r\n";
+				}
+				$error_message = "Error on PDO transaction function: " . $e->getMessage()  ."\r\n\r\n" . $t;				
+				$this->sendPDOErrorEmail("Error in ".getEnv("SCRIPT_NAME"), $error_message);
+				return false;
+			}
+		}
+		
+	}
+
+	
+	public function beginTransaction(){
+		return $this->dbh->beginTransaction();
+	}
+	
+	// To end a transaction and commit your changes:
+	public function commit(){
+		return $this->dbh->commit();
+	}
+	
+	/// To cancel a transaction and roll back your changes:
+	public function cancelTransaction(){
+		return $this->dbh->rollBack();
+	}
+	
+
+	public function __sleep(){
+		return array('_host', '_username', '_password', '_database',);
+       // return array('_host', '_username', '_password', '_database', 'strSQL', 'error', 'stmt');
+    }
+    
+    public function __wakeup(){
+        $this->makeConnection();
+    }
+	
+	
+	// send email to support group if there is any database error
+	public function sendPDOErrorEmail($sqll, $err){
+		global $gErrMailto, $_REQUEST;
+		
+		$isubject = "(PDO) MySQL error at:   ".$_SERVER['SERVER_NAME'].getEnv("SCRIPT_NAME");
+		$headers = "From: support@eseelynx.net \r\n";
+		//$headers .= "Content-type: text/html; \r\n";
+
+		$content = "Web Site: ".$_SERVER['SERVER_NAME'].getEnv("SCRIPT_NAME")."\n\n";
+
+$content.="Program :   ".__FILE__ . __LINE__ ."
+
+Database:   ".DB_DATABASE."
+
+Action     :   ".$sqll."
+
+Error       :   ".$err."
+
+Date       :   ".date( "Y-m-d H:i:s" )."
+
+Request List:  \r\n";
+
+		foreach($_REQUEST as $key => $d){
+			$content .= $key .' = '. $d . "\r\n";
+		}
+
+		$this->InsertErrorLog($_SERVER['SERVER_NAME'].getEnv("SCRIPT_NAME"), $content);
+		//mail($gErrMailto, $isubject, $content, $headers);
+		
+	}
+	
+	private function InsertErrorLog($page, $msg){
+		//global $gErrMailto;
+		
+		$file = MYSQL_ERROR_LOGS;
+		
+		//if (is_file($file)){
+			//$msg ='['. date('D M d Y H:i:s T').'] ['. $_SESSION['preview_tnt_admin']['username'].': '.getIPAddress().'] ['.$page.'] ' .$msg;
+			$msg ='['. date('r').'] ['.getIPAddress().'] ['.$page.'] ' .$msg;
+			if ($hFile = @fopen($file, "a")) {
+				fPuts($hFile, $msg."\n");
+				fClose($hFile);
+			} else {
+				$isubject = "(PDO.class.php) MySQL error at:   ".$_SERVER['SERVER_NAME'].getEnv("SCRIPT_NAME");
+				mail(ERROR_EMAIL, "Error - ".SCRIPT_PAGE_TITLE."", "Cannot write to file-".$file, "From: support@eseelynx.com");
+			}
+		//}
+	}
+	
+	
+	// return sql statement which replace all the colons with named placeholders with the 
+	public function odo_sql_debug($sql_string, array $params = null) {
+		if (!empty($params)) {
+			$indexed = $params == array_values($params);
+			foreach($params as $k=>$v) {
+				if (is_object($v)) {
+					if ($v instanceof \DateTime) $v = $v->format('Y-m-d H:i:s');
+					else continue;
+				}
+				elseif (is_string($v)) $v="'$v'";
+				elseif ($v === null) $v='NULL';
+				elseif (is_array($v)) $v = implode(',', $v);
+
+				if ($indexed) {
+					$sql_string = preg_replace('/\?/', $v, $sql_string, 1);
+				}
+				else {							
+					if ($k[0] != ':') $k1 = ':'.$k.',';   //add leading colon if it was left out
+					$sql_string = str_replace($k1, $v.', ',$sql_string);
+										
+					if ($k[0] != ':') $k2 = ':'.$k.' ,';  
+					$sql_string = str_replace($k2, $v.', ',$sql_string);
+					
+					if ($k[0] != ':') $k3 = ':'.$k;  
+					$sql_string = str_replace($k3, $v,$sql_string);
+					
+				}
+			}
+		}
+		return $sql_string;
+	}
+	
+	
+	
+		
+	
+			}	
+
+
+		function toDate($iTime)
+		{
+			//if (ereg("([0-9]{4}-[0-9]{2}-[0-9]{2})", strVal($iTime), $aMatches)) {
+			if (preg_match("/([0-9]{4}-[0-9]{2}-[0-9]{2})/", strVal($iTime), $aMatches)) {
+				// date/datetime type
+				return $aMatches[1];
+			} elseif (preg_match("/^[0-9]+$/", strVal($iTime))) {
+				// unix timestamp
+				return date("Y-m-d", intVal($iTime));
+			}
+			return false;
+		}
+		
+		function toTime($iTime)
+		{
+			//if (ereg("([0-9]{2}:[0-9]{2}:[0-9]{2})", strVal($iTime), $aMatches)) {
+			if (preg_match("/([0-9]{2}:[0-9]{2}:[0-9]{2})/", strVal($iTime), $aMatches)) {
+				return $aMatches[1];
+			//} elseif (ereg("^[0-9]+$", strVal($iTime))) {
+			} elseif (preg_match("/^[0-9]+$/", strVal($iTime))) {
+				return date("H:i:s", intVal($iTime));
+			}
+			return false;
+		}
+		
+		function toDateTime($iTime)
+		{
+			if (($sDate = toDate($iTime)) && ($sTime = toTime($iTime))) {
+				return $sDate . " " . $sTime;
+			}
+			return false;
+		}
+		
+		function toUnixTimeStamp($sDateTime)
+		{
+			// Date
+			//if (ereg("([0-9]{4})-([0-9]{2})-([0-9]{2})", $sDateTime, $aMatches)) {
+			if (preg_match("/([0-9]{4})-([0-9]{2})-([0-9]{2})/", $sDateTime, $aMatches)) {
+				list(, $iYear, $iMonth, $iDay) = $aMatches;
+				$iHour = 0;
+				$iMinute = 0;
+				$iSecond = 0;
+				// Time
+				//if (ereg("([0-9]{2}):([0-9]{2}):([0-9]{2})", $sDateTime, $aMatches)) {
+				if (preg_match("/([0-9]{2}):([0-9]{2}):([0-9]{2})/", $sDateTime, $aMatches)) {
+					list(, $iHour, $iMinute, $iSecond) = $aMatches;
+				}
+				return mktime($iHour, $iMinute, $iSecond, $iMonth, $iDay, $iYear);
+			}
+			return false;
+		}
+		
+// return a PDO connection
+	
+	
+	
+
+/*
+try{
+			$dbh = ConnectPDO();
+			$sth = $dbh->prepare($strSQL);
+			//$sth->bindParam(":ID", $iid);	
+			$sth->execute();
+			$dResult = $sth->fetchAll(PDO::FETCH_ASSOC);
+		}catch (PDOException $e) {
+			$error_message = "Error on PDO MySQL: " . $e->getMessage()  ."\r\n\r\n" . odo_sql_debug($strSQL, $parameters);				
+			sendPDOErrorEmail("Error in ".getEnv("SCRIPT_NAME"), $error_message);			
+		}
+		
+		
+
+	/*
+	
+	function fetchAll_PDO($strSQL, $parameters, $sScriptName=''){
+		$dResult = array();
+		try{
+			$dbh = ConnectPDO();
+			$sth = $dbh->prepare($strSQL);
+			//$sth->bindParam(":ID", $iid);	
+			$sth->execute($parameters);
+			$dResult = $sth->fetchAll(PDO::FETCH_ASSOC);
+		}catch (PDOException $e) {
+			$error_message = "Error on PDO MySQL: " . $e->getMessage()  ."\r\n\r\n" . odo_sql_debug($strSQL, $parameters);				
+			sendPDOErrorEmail("Error in ".$sScriptName, $error_message);			
+		}
+		return $dResult;
+	}
+	
+	
+	
+	function ConnectPDO_AM1470() {
+		$dsn = "mysql:host=wm6.eseenet.com;dbname=".DB_DATABASE_AM1470.";charset=utf8";
+		
+		try{
+		$pdo = new PDO($dsn, DB_USERNAME_AM1470, DB_PASSWORD_AM1470);
+		$pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);		
+		$pdo->setAttribute(PDO::ATTR_EMULATE_PREPARES, false);
+		//$mysqli =  mysqli_connect(DB_HOST, DB_USERNAME, DB_PASSWORD, DB_DATABASE);		
+		}catch(PDOEXception $e){
+			$error_message = "Failed to connect to MySQL: " . $e->getMessage() ;
+			sendPDOErrorEmail("Cannot connect to database", $error_message);
+		}
+		//mysqli_set_charset($mysqli, MYSQL_SET_CHARSET);
+		return ($pdo);					
+	}
+	
+	
+	function ConnectPDO() {
+		$dsn = "mysql:host=".DB_HOST.";dbname=".DB_DATABASE.";charset=utf8";
+		
+		try{
+		$pdo = new PDO($dsn, DB_USERNAME, DB_PASSWORD);
+		$pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);		
+		$pdo->setAttribute(PDO::ATTR_EMULATE_PREPARES, false);
+		//$mysqli =  mysqli_connect(DB_HOST, DB_USERNAME, DB_PASSWORD, DB_DATABASE);		
+		}catch(PDOEXception $e){
+			$error_message = "Failed to connect to MySQL: " . $e->getMessage() ;
+			sendPDOErrorEmail("Cannot connect to database", $error_message);
+		}
+		//mysqli_set_charset($mysqli, MYSQL_SET_CHARSET);
+		return ($pdo);
+	}
+	
+	*/
+
+	
+?>

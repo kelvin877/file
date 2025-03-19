@@ -1,0 +1,626 @@
+
+<?php
+ include 'header.php';
+
+?>
+
+<?php
+/*session_start();
+include 'include.php';
+include 'lib.login.php';*/
+
+
+
+$date = date('Y-m-d H:i:s');
+$action =  isset($_REQUEST[ "action" ]) && trim($_REQUEST[ "action" ]) ? trim( $_REQUEST[ "action" ] ) : '';
+$uid= isset($_REQUEST[ "uid" ]) && trim($_REQUEST[ "uid" ]) ? trim( $_REQUEST[ "uid" ] ) : '';
+
+
+
+
+$leave_type="";
+
+$single_day_dropdown="";
+
+$comment="";
+
+if(!isset($_SESSION["isLogin"]) || $_SESSION["isLogin"] !== true ){
+  redir("login.php");
+  exit;
+}
+
+
+
+$id =$_SESSION['login_account']['id'];
+
+/*$hdb = getConnection();
+$sql = "select * from user where id=$id";
+$reportResult=$hdb->query($sql);*/
+
+
+//if(count($reportResult)>0){
+//$value=$reportResult[0];
+//foreach ($reportResult as $key => $value) {
+
+$firstname=$_SESSION['login_account']['first_name'];
+$lastname=$_SESSION['login_account']['last_name'];
+$email=$_SESSION['login_account']['email'];
+//$phonenumber=$_SESSION['login_account']['phone'];
+$employeeid=$_SESSION['login_account']['staff_id'];
+$division=$_SESSION['login_account']['division'];
+$birthday=$_SESSION['login_account']['birthday'];
+$joindate=$_SESSION['login_account']['joindate'];
+$role=$_SESSION['login_account']['role'];
+$jobtype =$_SESSION['login_account']['type_of_employment'];
+$company =$_SESSION['login_account']['company'];
+$num_hour_work_per_day =$_SESSION['login_account']['num_hour_work_per_day'];
+$num_day_work_per_week =$_SESSION['login_account']['num_day_work_per_week'];
+$shift_day  = $_SESSION['login_account']['default_off_day'];
+
+
+
+$fullname=$firstname.' '.$lastname;
+
+/*}else {
+header('location: login.php');
+}*/
+//$id=$_GET['id'];
+
+
+
+$startdate="";
+$enddate="";
+
+//GET ALL public holiday days
+$sql = "select date from public_holidays where is_delete ='N'";
+$result =   $hdb->query($sql);
+$excludedDateArray = array();
+foreach ($result as $row) {
+  $excludedDateArray[] = $row['date'];
+}
+
+
+
+//select user's off days
+$default_off_day_sql = "select default_off_day from user where id=$id";
+$result = $hdb->query($default_off_day_sql);
+$default_off_day=$result[0]['default_off_day'];
+$default_off_day = explode(',', $default_off_day);
+
+
+$dayToNumber = [
+  "Monday" => 1,
+  "Tuesday" => 2,
+  "Wednesday"=>3,
+  "Thursday"=>4,
+  "Friday"=>5,
+  "Saturday"=>6,
+  "Sunday"=>7
+];
+
+$numbers_day_off = array();
+
+foreach ($default_off_day as $day) {
+  // Check if the day exists in the mapping, and if so, add its corresponding number to the result array
+  if (array_key_exists($day, $dayToNumber)) {
+    $numbers_day_off[] = $dayToNumber[$day];
+  }
+}
+
+
+
+$warningMessage = "";
+
+
+
+
+
+
+
+?>
+
+<style media="screen">
+.error{
+  color: red;
+  display: block;
+
+}
+.grey-title {
+  background-color: grey; /* Set the background color of the row to grey */
+  padding: 10px; /* Add padding to create space around the content */
+}
+
+.grey-title p {
+  color: white; /* Set the text color to white (or any other color you prefer) */
+  /* Add other text styles as needed */
+}
+
+
+
+
+</style>
+
+<div class="container-fluid">
+  <div class="row" id="profileCell">
+    <div class="col-lg-5">
+      <?php if($jobtype=="fulltime"): ?>
+        <div class="card mb-4">
+          <div class="card-body">
+            <div class="row">
+              <h2>Balance</h2>
+              <p style="color:red;">*The balance does not include any pending and approved records.</p>
+            </div>
+
+
+
+            <div class="row">
+              <div class="col-sm-7 card-title">
+                Current leave up to <strong><?php echo date('Y-m-d');  ?>
+                </strong>
+                <br/>
+
+              </div>
+              <div class="col-sm-5">
+                <?php
+                $leaveEntitlement = calculateTotalLeaveEntitlement();
+                $textClass = ($leaveEntitlement < 0) ? 'text-danger' : 'text-muted';
+                 ?>
+                 <p class="<?php echo $textClass; ?> mb-0">
+                     <?php echo $leaveEntitlement; ?> days
+                 </p>
+              </div>
+            </div>
+
+            <div class="row">
+              <div class="col-sm-7 card-title">
+                Current leave up to <strong><?php echo date('Y-12-31'); ?></strong>
+              </div>
+              <div class="col-sm-5">
+                <p class="text-muted mb-0"><?php echo calculateTotalLeaveEntitlement(date('Y-12-31')); ?> days</p>
+              </div>
+            </div>
+            <?php
+            /*$currentDate = new DateTime();
+            $joindate = new DateTime($joindate);
+
+            $yearDifference = $joindate->diff($currentDate)->y;
+
+            if ($yearDifference > 1):*/
+
+            ?>
+            <div class="row">
+              <div class="col-sm-7 card-title">
+                Year leave entitlement
+              </div>
+              <div class="col-sm-5">
+                <p class="text-muted mb-0"><?php echo getAnnualLeaveEntitlement() ?> days</p>
+              </div>
+            </div>
+
+
+            <!--<div class="row">
+            <div class="col-sm-7">
+            <p class="mb-0">Number of hour worked per day </p>
+          </div>
+          <div class="col-sm-5">
+          <p class="text-muted mb-0"><?php echo $num_hour_work_per_day; ?> hours</p>
+        </div>
+
+      </div>
+      <hr>
+
+      <div class="row">
+      <div class="col-sm-7">
+      <p class="mb-0">Number of day worked per week </p>
+    </div>
+    <div class="col-sm-5">
+    <p class="text-muted mb-0"><?php echo $num_day_work_per_week; ?> days</p>
+  </div>
+
+</div>
+<hr>-->
+</div>
+</div>
+
+<?php endif; ?>
+<div class="card mb-4">
+  <div class="card-body">
+    <div class="row">
+      <h2>User Profile</h2>
+    </div>
+    <div class="row">
+      <div class="col-sm-5 card-title">
+        Full name
+      </div>
+      <div class="col-sm-7">
+        <p class="text-muted mb-0"><?php echo $firstname.' '.$lastname; ?></p>
+      </div>
+    </div>
+
+    <div class="row">
+      <div class="col-sm-5 card-title">
+        Email
+      </div>
+      <div class="col-sm-7">
+        <p class="text-muted mb-0"><?php echo $email; ?></p>
+      </div>
+    </div>
+
+    <div class="row">
+      <div class="col-sm-5 card-title">
+        Division
+      </div>
+      <div class="col-sm-7">
+        <p class="text-muted mb-0"><?php echo $DIVISION[$division] ; ?></p>
+      </div>
+    </div>
+
+    <div class="row">
+      <div class="col-sm-5 card-title">
+        Employee ID
+      </div>
+      <div class="col-sm-7">
+        <p class="text-muted mb-0"><?php echo $employeeid; ?></p>
+      </div>
+    </div>
+
+    <div class="row">
+      <div class="col-sm-5 card-title">
+        Date joined
+      </div>
+      <div class="col-sm-7">
+        <p class="text-muted mb-0"><?php
+        $new_joindate = new DateTime($joindate);
+        $joindate_formatted = $new_joindate->format('Y M d');
+        $joindate_formatted = strtoupper($joindate_formatted);
+
+         echo $joindate_formatted; ?></p>
+      </div>
+    </div>
+
+    <div class="row">
+      <div class="col-sm-5 card-title">
+        Year of employment
+      </div>
+      <div class="col-sm-7">
+        <p class="text-muted mb-0"><?php echo getYearOfEmployment();  ?></p>
+      </div>
+    </div>
+
+    <div class="row">
+      <div class="col-sm-5 card-title">
+        Job type
+      </div>
+      <div class="col-sm-7">
+        <p class="text-muted mb-0"><?php echo $JOB_TYPE[$jobtype]; ?></p>
+      </div>
+    </div>
+
+    <div class="row">
+      <div class="col-sm-5 card-title">
+        Saturday/Sunday Off
+      </div>
+      <div class="col-sm-7">
+        <p class="text-muted mb-0"><?php
+        if($shift_day != ""){
+          echo "Yes";
+        }else {
+          echo "No";
+        }
+
+
+         ?></p>
+      </div>
+    </div>
+
+
+  </div>
+</div>
+
+</div>
+<div class="col-lg-7">
+  <div class="card mb-4">
+    <div class="row">
+      <h2>Recent Leave Activities</h2>
+    </div>
+    <table id="formtable" class="table table-striped" style="width:100%">
+      <thead>
+        <tr>
+          <th>Start date</th>
+          <th>End date</th>
+          <th>Leave day</th>
+          <th>Type of leave</th>
+          <th>Status</th>
+          <th>Action</th>
+
+        </tr>
+      </thead>
+      <tbody>
+        <?php
+        include 'include.php';
+        $hdb = getConnection();
+        $sql = "select * from leave_table Where user_id=$id order by reference_id DESC limit 5";
+        $reportResult=$hdb->query($sql);
+
+        if(count($reportResult)>0){
+
+          foreach ($reportResult as $key => $value) {
+            $reference_id=$value['reference_id'];
+            $userid=$value['user_id'];
+            $start_date=$value['start_date'];
+            $end_date=$value['end_date'];
+            $number_of_day=$value['number_of_day'];
+            $type_of_leave =$value['type_of_leave'];
+
+            $selected_leave = $TYPE_OF_LEAVE[$type_of_leave];
+            $leave_time = $value['leave_time'];
+
+            $status=$value['status'];
+
+            if($leave_time == 'morning'){
+              $leave_time_s = '<br>(Morning)';
+            }elseif ( $leave_time =='afternoon') {
+              $leave_time_s = '<br>(Afternoon)';
+            }else {
+              $leave_time_s = '';
+            }
+
+
+            ?>
+            <tr>
+              <td><?php echo $start_date;?></td>
+              <td><?php echo $end_date; ?></td>
+              <td><?php echo $number_of_day; ?></td>
+              <td><?php echo $selected_leave['display_title'].$leave_time_s; ?></td>
+              <td><?php echo displayStatus($status);   // defined in php-lib/site_functions.php  ?></td>
+
+
+              <td>
+                <?php if($status == 'Pending'):  ?>
+                  <button alt="Cancel <?php echo $fullname;  ?> Leave Record" title="Cancel <?php echo $fullname;  ?> Leave Record" type="button" class="cancel_button btn btn-danger" data-fullname="<?php echo $fullname; ?>" data-id="<?php echo $id;?>"  data-claimid="<?php echo $reference_id;?>">Cancel</button>
+                <?php endif; ?>
+              </td>
+              <div class="modal fade cancel_note" id="cancel_note" tabindex="-1" role="dialog" aria-labelledby="myModalLabel" aria-hidden="true">
+                <div class="modal-dialog" role="document">
+                  <div class="modal-content">
+                    <div class="modal-header">
+                      <h5 class="modal-title" id="myModalLabel">Cancel</h5>
+                      <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                        <span aria-hidden="true">&times;</span>
+                      </button>
+                    </div>
+                    <div class="modal-body">
+                      <input type="hidden" name="claim_id" id="claim_id" value="">
+                      <p>Application Id: <span class="claim_id"></span></p>
+                      <h3>Remark</h3>
+                      <textarea name="cancel_comment" rows="8" style="resize: none; width: 100%;" id="cancel_comment"></textarea>
+                    </div>
+                    <div class="modal-footer">
+                      <button type="button" class="btn btn-secondary close" data-dismiss="modal">Close</button>
+                      <button type="submit"  name="reject" id="reject" data-fullname="<?php echo $fullname;?>" data-id="<?php echo $id; ?>" data-email="<?php echo $email; ?>" class="btn btn-primary cancel-submit-btn">submit</button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </tr>
+          <?php }} ?>
+        </tbody>
+      </table>
+    </div>
+
+    <?php
+    $hdb = getConnection();
+    $sql = "SELECT *
+    FROM leave_balance
+    WHERE user_id = :id
+    ORDER BY balance_date DESC
+    LIMIT 2";
+    $parameters = array('id'=>$id);
+
+    $result = $hdb->query($sql,$parameters);
+    //$balance = $result[0]['balance'];
+    //echo $balance;
+    if(count($result)>0):
+      //if($balance !=""):
+
+      ?>
+
+      <div class="card mb-4">
+        <div class="row">
+          <h2>Starting Balance</h2>
+        </div>
+        <div class="text-center">
+          <div class="modal-body">
+            <table id="" class="table table-striped" style="width:100%">
+              <thead>
+                <tr>
+                  <th class="text-start">Balance remaining cut off date</th>
+                  <th class="text-start">Type of leave </th>
+                  <th class="text-start">Balance</th>
+                </tr>
+              </thead>
+
+              <tbody>
+                <?php
+                if(count($result)>0){
+                  foreach($result as $key => $value){
+                    $balance=$value['balance'];
+                    $balance_date=$value['balance_date'];
+                    //$type_of_leave=$value['type_of_leave'];
+
+                    $type_of_leave =$value['type_of_leave'];
+
+                    $selected_leave = $TYPE_OF_LEAVE[$type_of_leave];
+
+
+
+                    ?>
+                    <tr class="clickable-row">
+                      <td class="text-start"><?php echo $balance_date; ?></td>
+                      <td class="text-start"><?php echo $selected_leave['display_title']; ?></td>
+                      <td class="text-start"><?php echo $balance; ?></td>
+                    </tr>
+                  <?php }
+                }
+                ?>
+
+
+              </tbody>
+
+
+            </table>
+
+          </div>
+
+          <button alt="Show All Balances" title="Show All Balances" class="modal_button2" type="button" name="button">Show all</button>
+          <?php include 'starting_balance.php'; ?>
+        </div>
+      </div>
+    <?php endif; ?>
+
+  </div>
+
+
+
+</div>
+
+
+</div>
+</div>
+</div>
+<?php include 'footer.php'; ?>
+
+<script type="text/javascript">
+
+
+$(document).ready(function() {
+
+<?php
+if(isset($_SESSION['submit']) && $_SESSION['submit_success']= 'submit_success'){
+ ?>
+var msg="Application has submitted.";
+message(msg);
+
+
+
+<?php
+unset($_SESSION['submit']);
+}
+ ?>
+
+
+<?php
+if(isset($_SESSION['cancel']) && $_SESSION['cancel']='cancel_success'){
+ ?>
+ var msg = "Application has cancelled.";
+ message(msg);
+
+
+<?php
+unset($_SESSION['cancel']);
+}
+ ?>
+
+
+  $('#formtable').DataTable({
+    "ordering":false,
+    "bLengthChange": false,
+    "bFilter": false,
+    "bInfo": false,
+    "stateSave": true,
+    "scrollX": true,
+    "scrollCollapse": true,
+    "paging": false,
+    //'responsive':true,
+  });
+
+
+  var modalElement = document.getElementById('modal_id2');
+
+  if(modalElement){
+    var myModal2 = new bootstrap.Modal(document.getElementById('modal_id2'),{});
+
+    $(document).on('click', '.modal_button2', function() {
+      var claim_id = $(this).data('claimid');
+      console.log(claim_id);
+
+      $(".modal-body #claim_id").val(claim_id);
+      $(".modal-body .claim_id").text(claim_id);
+      myModal2.show();
+    });
+
+
+    $('#modal_id2 .close').click(function() {
+      myModal2.hide();
+    });
+  }else {
+
+  }
+
+
+
+
+  var cancel_note = new bootstrap.Modal(document.getElementById('cancel_note'), {});
+  var originalTextareaValue = "";
+
+  $(document).on('click', '.cancel_button', function() {
+
+    var claim_id = $(this).data('claimid');
+    console.log(claim_id);
+
+    originalTextareaValue = $("#cancel_comment").val();
+
+    $(".modal-body #claim_id").val(claim_id);
+    $(".modal-body .claim_id").text(claim_id);
+    cancel_note.show();
+  });
+
+  $('#cancel_note').on('hidden.bs.modal', function () {
+          $("#cancel_comment").val(originalTextareaValue);
+      });
+
+
+  $('#cancel_note .close').click(function() {
+    cancel_note.hide();
+  });
+
+
+$('.cancel-submit-btn').click(function(e) {
+  e.preventDefault();
+
+  var claim_id = $(".modal-body #claim_id").val();
+  var fullname = $(this).data('fullname');
+  var id = $(this).data('id');
+  var email = $(this).data('email');
+
+  $.ajax({
+    type: "POST",
+    url: "leave_record.ajax.php",
+
+    data: { action : 'cancel_form' ,  claim_id: claim_id, cancel_comment: $("#cancel_comment").val(), fullname:fullname, id:id, email:email } ,
+    success: function(response){
+      response=JSON.parse(response);
+
+      location.reload(true);
+
+    },
+    error: function(){
+      alert("Error");
+    }
+  });
+
+});
+
+
+});
+
+
+
+
+
+
+
+
+
+
+</script>

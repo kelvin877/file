@@ -1,0 +1,307 @@
+<?php
+session_start();
+
+  ini_set('display_errors', 1);
+  ini_set('display_startup_errors', 1);
+  error_reporting(E_ALL);
+
+
+
+//testing
+include 'lib.login.php';
+include 'include.php';
+
+$email = $password = "";
+$email_err = $password_err = $login_err = "";
+
+$date = date('Y-m-d H:i:s');
+
+$hdb = getConnection();
+
+
+
+
+if($_SERVER["REQUEST_METHOD"] == "POST"){
+
+    // Check if username is empty
+    if(empty(trim($_POST["email"]))){
+        $email_err = "Please enter email.";
+    } else{
+        $email = trim($_POST["email"]);
+    }
+
+    // Check if password is empty
+    if(empty(trim($_POST["password"]))){
+        $password_err = "Please enter your email password.";
+    } else{
+        $password = trim($_POST["password"]);
+    }
+
+    // Validate credentials
+    if(empty($email_err) && empty($password_err)){
+      //check_login($email,$password);
+      if(check_login($email,$password)){
+        $_SESSION["isLogin"]=true;
+
+        Last_access($email);
+
+
+        //$sql = "select * from user where email=:email and is_delete='N'";
+
+        $sql="SELECT c.company_name,u.* FROM user AS u left JOIN company AS c ON u.company = c.id where email=:email /*and is_delete='N'*/";
+
+        $rData = $hdb->query($sql,array('email'=>$email));
+
+        //print_r($rData);
+
+
+        if(count($rData)>0){
+
+          $_SESSION['login_account'] = $rData[0];
+          $value = $rData[0];
+          $id = $value['id'];
+          $email = $value['email'];
+          $is_delete  = $value['is_delete'];
+
+          $role=$value['role'];
+
+          if($is_delete ='N'){
+            if (isset($_SESSION['redirect_url']) ){
+                $redirect_url=$_SESSION['redirect_url'];
+                redir("$redirect_url");
+            }
+
+            else {
+              if($role=='supervisor'||$role=='user'){
+                redir("user_profile.php");
+              }
+              if($role=='payroll'||$role=='admin'||$role=='executive'){
+                redir("leave_record.php");
+              }
+
+                //header("location: user_profile.php");
+            }
+
+          }else {
+            $login_err="Your account have been deleted";
+          }
+
+
+
+        }else {
+          $login_err="Your account does not exist";
+
+          //header("location:login.php");
+        }
+
+
+        /*$sql = "Update user set last_access=:date where id=:id";
+
+
+        $parameters = array('date'=>$date, 'id'=>$id);
+        $hdb->query($sql,$parameters);
+
+        header("location: datatable.php");*/
+        //exit;
+      }else {
+
+        $email=($_POST["email"]);
+        $date = date('Y-m-d H:i:s');
+
+        if (!empty($_SERVER['HTTP_CLIENT_IP'])) {
+          $ip = $_SERVER['HTTP_CLIENT_IP'];
+        } elseif (!empty($_SERVER['HTTP_X_FORWARDED_FOR'])) {
+          $ip = $_SERVER['HTTP_X_FORWARDED_FOR'];
+        } else {
+          $ip = $_SERVER['REMOTE_ADDR'];
+        }
+        $user_agent = $_SERVER['HTTP_USER_AGENT'];
+
+
+        insertUserErrorLog($email,$ip,$user_agent,$date);
+
+        $login_err="Please enter valid password";
+        //header("location: login.php");
+        //exit;
+      }
+
+
+    }
+
+
+}
+
+
+function Last_access($email){
+
+  global $date,$hdb;
+  $updatesql = "Update user set last_successful_login_dt=:date where email=:email";
+  $parameters=array('email'=>$email,'date'=>$date);
+  $hdb->query($updatesql,$parameters);
+
+
+}
+
+function insertUserErrorLog($email,$ip,$browser,$date){
+global $hdb;
+
+$sql = "Insert Into user_login_error set email=:email,ip_address=:ip,user_browser=:browser, created_at=:date";
+
+$parameters=array('email'=>$email,'ip'=>$ip,'browser'=>$browser,'date'=>$date);
+
+$hdb->query($sql,$parameters);
+
+
+
+}
+
+
+
+?>
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+  <head>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title></title>
+  </head>
+
+<link rel="stylesheet" href="css/bootstrap.min.css">
+<script src="js/bootstrap.bundle.min.js"></script>
+<style media="screen">
+.gradient-custom {
+/* fallback for old browsers */
+background: white;
+
+/* Chrome 10-25, Safari 5.1-6 */
+/*background: -webkit-linear-gradient(to right, rgba(106, 17, 203, 1), rgba(37, 117, 252, 1));*/
+
+/* W3C, IE 10+/ Edge, Firefox 16+, Chrome 26+, Opera 12+, Safari 7+ */
+/*background: linear-gradient(to right, rgba(106, 17, 203, 1), rgba(37, 117, 252, 1));*/
+}
+
+#spinner {
+  position: fixed;
+  top: 0; left: 0; z-index: 9999;
+  width: 100vw; height: 100vh;
+  background: rgba(0, 0, 0, 0.7);
+  transition: opacity 0.2s;
+}
+
+/* (B) CENTER LOADING SPINNER */
+#spinner img {
+  position: absolute;
+  top: 50%; left: 50%;
+  transform: translate(-50%);
+}
+
+/* (C) SHOW & HIDE */
+#spinner {
+  visibility: hidden;
+  opacity: 0;
+}
+#spinner.show {
+  visibility: visible;
+  opacity: 1;
+}
+
+</style>
+  <body onload="setFocus();"  >
+
+  <header style="background-color: #2e87c1; width:100%; display:block">
+    	<h1 style="background-color: #26638a; padding: 0 20px; color:#fff; margin:0; line-height: 60px">Leave Management System</h1>
+    </header>
+
+    <section class="vh-100 gradient-custom" style="background-image: url('images/bg.jpg');" > <!--style="background-color: #e5e6ea" -->
+      <div class="container-xl py-5 h-100">
+        <div class="row d-flex justify-content-center align-items-center h-100">
+          <div class="col-12 col-md-8 col-lg-6 col-xl-5">
+            <div class="card bg-white text-secondary" style="border-radius: 1rem;">
+              <div class="card-body p-5">
+
+                <div class="mb-md-5 mt-md-4 pb-5">
+                  <?php
+                      if(!empty($login_err)){
+                          echo '<div class="alert alert-danger">' . $login_err . '</div>';
+                      }
+                      ?>
+          <script language="javascript" type="text/javascript">
+
+            function setFocus() {
+               document.getElementById("typeEmailX").focus();
+            }
+
+      	 	function valid_form()
+      				{
+
+                  var inpObj = document.getElementById("contestantFrm");
+
+
+                  if (inpObj.checkValidity()) {
+
+                      inpObj.login.disabled = true;
+                      inpObj.login.value = "Please wait...";
+
+                      document.getElementById("spinner").classList.add("show");
+
+
+                      return true;
+                  }
+                  else{
+                      document.getElementById("spinner").classList.add("show");
+                      inpObj.reportValidity();
+                      return false;
+                  }
+
+      				}
+      	  </script>
+
+
+
+
+
+
+                <div id="spinner" >
+                <img src="images/ajax-loader.gif"/>
+                </div>
+
+                <form id="contestantFrm" class="" action="<?php echo htmlspecialchars($_SERVER["PHP_SELF"]); ?>" onsubmit="return valid_form();"   method="post">
+                <h2 class="fw-bold mb-2 text-uppercase">Login</h2>
+                <p class="text-dark mb-5">Please enter your email and password</p>
+
+
+                <div class="form-outline form-white mb-4">
+                  <label class="form-label text-dark" for="typeEmailX">Email Address:</label>
+                  <input type="email" name="email" id="typeEmailX" class="form-control form-control-lg bg-light <?php echo (!empty($email_err)) ? 'is-invalid' : '';  ?>" value="<?php echo $email; ?>" placeholder="Enter your email address" />
+                  <span class="invalid-feedback"><?php echo $email_err; ?></span>
+
+                </div>
+
+                  <div class="form-outline form-white mb-4">
+
+                    <label class="form-label text-dark" for="typePasswordX">Password:</label>
+                    <input type="password" name="password" id="typePasswordX" class="form-control form-control-lg bg-light <?php echo (!empty($password_err)) ? 'is-invalid' : ''; ?>" placeholder="Enter your email password" />
+                    <span class="invalid-feedback"><?php echo $password_err; ?></span>
+
+                  </div>
+
+
+
+                  <button class="btn btn-primary btn-lg px-5 btn-block" name="login" type="submit">Login</button>
+
+
+
+                </div>
+
+
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </form>
+
+
+
+  </body>
+</html>

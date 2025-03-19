@@ -1,0 +1,287 @@
+<?php
+function site_url() {
+		if(isset($_SERVER['HTTPS'])){
+			$protocol = ($_SERVER['HTTPS'] && $_SERVER['HTTPS'] = "on") ? "https" : "http";
+		}else{
+			$protocol = 'http';
+		}
+		return $protocol."://".LIVE_DOMAIN.'/';
+	}
+
+	defined('DEBUG_MODE') or  define("DEBUG_MODE", true);
+
+	defined('APP_DOMAIN') or   define("APP_DOMAIN", strToLower($_SERVER['SERVER_NAME']));
+
+	defined('TEST_SERVER') or  define("TEST_SERVER" , false);
+
+	defined('DB_LOCK_NAME_PREFIX') or  define("DB_LOCK_NAME_PREFIX", "fairchild");
+
+	if (TEST_SERVER){
+		defined('APP_NAME') or  define("APP_NAME", "PREVIEW Fairchild Group");
+		defined('LIVE_DOMAIN') or  define("LIVE_DOMAIN", "previewhr.eseelynx.com");
+		define ("reCAPTCHA_SITE_KEY_INVISIBLE", "");
+		define ("reCAPTCHA_SECRET_KEY_INVISIBLE", "");
+		defined('EXPORT_PATH') or  define("EXPORT_PATH", '/usr/local/www/groups/previewhr.eseelynx.com/export/');
+
+		defined('IMAGE_DOCUMENT_ROOT') or  define("IMAGE_DOCUMENT_ROOT", '/usr/local/www/groups/previewhr.eseelynx.com/docs/leave');
+		defined('LOG_PATH') or  define("LOG_PATH" , "/usr/local/www/groups/previewhr.eseelynx.com/logs/");
+
+		defined('DB_DATABASE') or  define("DB_DATABASE", "hr_eseelynx_com_preview");
+
+	}else {
+		defined('APP_NAME') or  define("APP_NAME", "Fairchild Group");
+		defined('LIVE_DOMAIN') or  define("LIVE_DOMAIN", "hr.eseelynx.com");
+		define ("reCAPTCHA_SITE_KEY_INVISIBLE", "");
+		define ("reCAPTCHA_SECRET_KEY_INVISIBLE", "");
+		defined('EXPORT_PATH') or  define("EXPORT_PATH", '/usr/local/www/groups/hr.eseelynx.com/export/');
+
+		defined('IMAGE_DOCUMENT_ROOT') or  define("IMAGE_DOCUMENT_ROOT", '/usr/local/www/groups/hr.eseelynx.com/docs/leave');
+		defined('LOG_PATH') or  define("LOG_PATH" , "/usr/local/www/groups/hr.eseelynx.com/logs/");
+
+		defined('DB_DATABASE') or  define("DB_DATABASE", "hr_eseelynx_com");
+	}
+
+	defined('BACKEND_APP_URL') or  define("BACKEND_APP_URL", site_url()."manager");
+
+	defined('HTTP_SERVER') or  define("HTTP_SERVER", "http://" . LIVE_DOMAIN);
+	defined('HTTPS_SERVER') or  define("HTTPS_SERVER", HTTP_SERVER);
+
+	defined('IMAGE_URL') or  define("IMAGE_URL", site_url());
+
+
+	defined('MYSQL_ERROR_LOGS') or  define("MYSQL_ERROR_LOGS", LOG_PATH."mysql-error.log");
+
+
+	defined('TEST_EMAIL') or  define("TEST_EMAIL", "kelvinling@eseelynx.com");
+	defined('ERROR_EMAIL') or  define("ERROR_EMAIL", "kelvinling@eseelynx.com");
+	defined('INFO_EMAIL') or  define("INFO_EMAIL", TEST_SERVER ? TEST_EMAIL : "kelvinling@eseelynx.com");
+//	defined('REPLY_ORDER_EMAIL') or  define("REPLY_ORDER_EMAIL",  "no-reply@eseelynx.com");
+
+
+	defined('DB_HOST') or define('DB_HOST', 'localhost');
+
+	defined('DB_USERNAME') or  define("DB_USERNAME", "");
+	defined('DB_PASSWORD') or  define("DB_PASSWORD", "");
+
+
+
+
+
+	defined('PAID_LEAVE') or define('PAID_LEAVE',  true);
+	defined('UNPAID_LEAVE') or define('UNPAID_LEAVE',  false);
+
+	defined('ALLOW_USE_ENTITLEMENT') or define('ALLOW_USE_ENTITLEMENT',  true);
+	// the user works less than 1 year, cant use the annual leave entitlement
+	defined('NOT_ALLOW_USE_ENTITLEMENT') or define('NOT_ALLOW_USE_ENTITLEMENT',  false);
+
+	defined('FOR_APPLY_LEAVE_ONLY') or define('FOR_APPLY_LEAVE_ONLY',  true);
+
+
+	//defined('PERSONAL_LEAVE_ANNUAL_ENTITLEMENT') or define('PERSONAL_LEAVE_ANNUAL_ENTITLEMENT',  5);
+	//defined('PAID_PERSONAL_LEAVE_ANNUAL_ENTITLEMENT') or define('PAID_PERSONAL_LEAVE_ANNUAL_ENTITLEMENT',  3);
+	//defined('UNPAID_PERSONAL_LEAVE_ANNUAL_ENTITLEMENT') or define('UNPAID_PERSONAL_LEAVE_ANNUAL_ENTITLEMENT',  PERSONAL_LEAVE_ANNUAL_ENTITLEMENT-PAID_PERSONAL_LEAVE_ANNUAL_ENTITLEMENT);
+
+	/*defined('BEREAVEMENT_LEAVE_ANNUAL_ENTITLEMENT') or define('BEREAVEMENT_LEAVE_ANNUAL_ENTITLEMENT',  10);
+	defined('PAID_BEREAVEMENT_LEAVE_ANNUAL_ENTITLEMENT') or define('PAID_BEREAVEMENT_LEAVE_ANNUAL_ENTITLEMENT',  3);
+	defined('UNPAID_BEREAVEMENT_LEAVE_ANNUAL_ENTITLEMENT') or define('UNPAID_BEREAVEMENT_LEAVE_ANNUAL_ENTITLEMENT',  BEREAVEMENT_LEAVE_ANNUAL_ENTITLEMENT-PAID_BEREAVEMENT_LEAVE_ANNUAL_ENTITLEMENT);
+*/
+
+	//$CLAIM_STATUS = array(	"APPROVED" , 'REJECTED', "PENDING",  "CANCELLED"		);
+
+
+	$SICK_LEAVE_ENTITLEMENT = array('BC' => array('PAID' => 5, 'UNPAID' => 3),
+									'FEDERAL' => array('PAID' => 10, 'UNPAID' => 0),
+								);
+
+	$PERSONAL_LEAVE_ANNUAL_ENTITLEMENT	= array('FEDERAL' => array('PAID' => 3, 'UNPAID' => 2));
+
+
+	$BEREAVEMENT_LEAVE_ANNUAL_ENTITLEMENT = array('FEDERAL' => array('PAID' => 3, 'UNPAID'=>7)
+	                                 , 'BC' => array('PAID'=>0,'UNPAID' => 3) );
+
+
+
+
+
+	$roleToPageMapping = [
+		'user'=>['user_profile.php','leave_balance.php','leave_record.php','public_holiday.php','leave_form.php','leave_form_pre_stage.php','claim_note.php','calendar_event.php'],
+		'supervisor'=>['user_profile.php','leave_balance.php','leave_record.php','leave_record_payroll.php','export_list.php','public_holiday.php','user_listing.php','user.php','leave_form.php','leave_form_pre_stage.php','claim_note.php','calendar_event.php','all_user_leave_balance.php'],
+		'payroll'=>['public_holiday.php','user_listing.php','leave_record_payroll.php','export_list.php','user.php','claim_note.php','calendar_event.php'],
+		'admin'=>['public_holiday.php','user_listing.php','leave_record.php','leave_record_payroll.php','export_list.php','user.php','claim_note.php','calendar_event.php'],
+		'executive'=>['public_holiday.php','leave_record.php','leave_record_payroll.php','export_list.php','user_listing.php','user.php','claim_note.php','calendar_event.php','all_user_leave_balance.php']
+	];
+
+	/*$defaultErrorPage = 'error.php';
+	foreach ($roleToPageMapping as &$pages) {
+	    $pages[] = $defaultErrorPage;
+	}*/
+
+
+	$JOB_TYPE = array(
+		'fulltime' => 'Full time',
+		'parttime'=>'Part time'
+
+	);
+
+	$DAY_OFF_TIME = array(
+		'fullday' => 'Full Day',
+		'first_half_day' => 'First Half of the day',
+		'second_half_day' => 'Second Half of the day',
+		'9' => '9:00 AM (09:00)',
+		'10' => '10:00 AM (10:00)',
+		'11' => '11:00 AM (11:00)',
+		'12' => '12:00 PM (12:00)',
+		'1'=> '1:00 PM (13:00)',
+		'2' => '2:00 PM (14:00)',
+		'3' => '3:00 PM (15:00)',
+		'4' => '4:00 PM (16:00)',
+		'5' => '5:00 PM (17:00)',
+		'6' => '6:00 PM (18:00)'
+	);
+
+
+
+	$roleoption = array(
+		'user'=>'User',
+		'supervisor' => 'Supervisor',
+		'admin' => 'Admin',
+		'payroll' => 'Payroll',
+		'executive' => 'Executive'
+	);
+
+
+
+
+	$DIVISION = array(
+		'it_department'=>'IT Department',
+		'marketing'=>'Marketing',
+		'operations'=>'Operations',
+		'production'=>'Production',
+		'general_management'=>'General Management',
+		'customer_service'=>'Customer Service',
+		'human_resources'=>'Human Resources',
+		'purchasing'=>'Purchasing',
+		'sales'=>'Sales',
+		'business_development'=>'Business Development'
+	);
+
+
+		$PUBLIC_HOLIDAY = array(
+			'New Year'=>'New Year',
+			'Family Day'=> 'Family Day',
+			'Good Friday'=>'Good Friday',
+			'Victoria Day'=>'Victoria Day',
+			'Canada Day'=>'Canada Day',
+			'Civil Day'=>'Civil Day',
+			'Labour Day'=>'Labour Day',
+			'National Day for Truth and Reconciliation'=>'National Day for Truth and Reconciliation',
+			'Thanksgiving Day'=>'Thanksgiving Day',
+			'Remembrance Day'=>'Remembrance Day',
+
+			'Christmas Day'=>'Christmas Day',
+			'Boxing Day'=>'Boxing Day'
+
+
+		);
+
+
+	//$PERSONAL_LEAVE_ANNUAL_ENTITLEMENT	= array('FEDERAL' => array('PAID' => 3, 'UNPAID' => 2));
+
+
+
+	/*$TYPE_OF_LEAVE = array(
+
+		'ANNUAL' => 'Annual Leave',
+		'PERSONAL_LEAVE' => 'Personal Leave',
+		'SICK_LEAVE' => 'Medical Leave',
+		'COMPENSATION' => 'Compensation',
+		'BEREAVEMENT_LEAVE' => 'Bereavement Leave',
+		'PARENTAL_LEAVE' => 'Parental Leave',
+		'RESERVIST_LEAVE'=>'Reservisit Leave',
+		'UNPAID_LEAVE' => 'Unpaid',
+		'OTHERS' => 'Others'
+
+	);*/
+
+	$TYPE_OF_LEAVE = array(
+
+	  'ANNUAL' => array('display_title' => 'Annual Leave', 'incorption_type' => 'both'),
+	  'PERSONAL_LEAVE' => array('display_title' => 'Personal Leave','incorption_type'=>'federal'),
+	  'SICK_LEAVE' => array('display_title' => 'Medical Leave', 'incorption_type' => 'both'),
+	  'COMPENSATION' => array('display_title' => 'Compensation', 'incorption_type' => 'both'),
+	  'BEREAVEMENT_LEAVE' => array('display_title' => 'Bereavement Leave','incorption_type' => 'both'),
+	  'PARENTAL_LEAVE' => array('display_title' => 'Parental Leave','incorption_type' => 'both'),
+	  'RESERVIST_LEAVE'=> array('display_title' => 'Reservisit Leave','incorption_type' => 'both'),
+	  'UNPAID_LEAVE' =>   array('display_title' =>  'Unpaid'  ,'incorption_type' => 'both' ),
+	  'OTHERS' => array('display_title' => 'Others' ,'incorption_type' => 'both')
+
+	);
+
+	/*$company_option = array(
+		'1'=>'eSeeLYNX',
+		'2'=>'SeaLandAir'
+	);
+*/
+$INCORPORATION_TYPE = array(
+	'federal' => 'Federal',
+	'bc' => 'BC',
+	'all'=>'Federal & BC'
+);
+
+	$STATUS_LIST = array(
+		'SHOW_ALL'=>'Show All',
+		'PENDING_LIST'=>'Pending',
+		'APPROVED_LIST'=>'Approved',
+		'CONFIRMED_LIST'=>'Confirmed',
+		'REJECTED_LIST'=>'Rejected',
+		'Cancelled_LIST'=>'Cancelled'
+	);
+
+
+
+/*	$PUBLIC_HOLIDAYS = array(
+		"new_year" => "New Year's Day",
+		"family_day" => "Family Day",
+		"good_friday"=>"Good Friday",
+		"victoria_day"=>"Victoria Day",
+		"canada_day"=>"Canada Day",
+		"bc_day"=>"B.C. Day",
+		"labour_day"=>"Labour Day",
+		"national_day"=>"National Day for Truth and Reconciliation",
+		"thanks_giving_day"=>"Thanksgiving Day",
+		"remembrance_day"=>"Remembrance Day",
+		"christmas_day"=>"Christmas Day",
+		"boxing_day"=>'Boxing Day'
+	);
+
+	$PROVINCE = array(
+						"" => "[Choose One]",
+						"AB" => "Alberta",
+						"BC" => "British Columbia",
+						"MB" => "Manitoba",
+						"NB" => "New Brunswick",
+						"NL" => "Newfoundland",
+						"NT" => "Northwest Territories",
+						"NS" => "Nova Scotia",
+						"NU" => "Nunavut",
+						"ON" => "Ontario",
+						"PE" => "Prince Edward Island",
+						"QC" => "Quebec",
+						"SK" => "Saskatchewan",
+						"YT" => "Yukon Territory"
+				);
+
+
+	defined('INDEX_PAGE') or  define("INDEX_PAGE", "index.php");
+	defined('LOGIN_PAGE') or  define("LOGIN_PAGE", "login.php");
+	defined('SIGNUP_PAGE') or  define("SIGNUP_PAGE", "signup");
+*/
+	defined('DBT_USER') or  define("DBT_USER", "user");
+	defined('DBT_SETTINGS') or  define("DBT_SETTINGS", "settings");
+	defined('DBT_LEAVE') or  define("DBT_LEAVE", "leave_table");
+	defined('DBT_LEAVE_DETAIL') or  define("DBT_LEAVE_DETAIL", "leave_detail");
+
+	//*** for order email ***/
+	defined('LISTER_HEADER_COLOR') or  define("LISTER_HEADER_COLOR", "#0150AF");
+	defined('LISTER_CELL_COLOR') or  define("LISTER_CELL_COLOR", "#EFF2F6");
+	defined('LISTER_CELL_ALTERNATE_COLOR') or  define("LISTER_CELL_ALTERNATE_COLOR", "#ffffff");

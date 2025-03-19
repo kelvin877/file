@@ -1,0 +1,284 @@
+<?php include 'header.php';
+
+
+//print_r($_REQUEST);
+$selectedDate = isset($_REQUEST['selectdate']) && $_REQUEST['selectdate'] ? trim($_REQUEST['selectdate']) : date('Y-m-d');
+
+
+if (preg_match("/^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[1-2][0-9]|3[0-1])$/",$selectedDate)) {
+    //return true;
+} else {
+    $selectedDate = date('Y-m-d');
+}
+
+
+$id =$_SESSION['login_account']['id'];
+$company =$_SESSION['login_account']['company'];
+
+
+$companyArray = explode(',', $company);
+$firstCompany = $companyArray[0];
+
+
+$sql = "select * from company where id = $firstCompany";
+$result = $hdb->query($sql);
+if(count($result)>0){
+  foreach ($result as $key => $value) {
+    $type = $value['incorporation_type'];
+    $company_name = $value['company_name'];
+
+  }
+
+}
+
+
+
+
+
+
+
+
+?>
+
+
+
+
+
+
+<?php /*?>    <table class="table table-bordered table-with-line" style="width:100%">
+
+<thead>
+<tr>
+<th></th>
+<th>Annual Leave</th>
+<th>Personal</th>
+<th>Medical</th>
+<th>Compensation</th>
+<th>Unpaid</th>
+<th>Others</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><?php echo date('Y')-2; ?> leave balance forward</td>
+<td></td>
+<td>N/A</td>
+<td><?php echo calculateMedicalLeaveBalance( (date('Y')-2) )?> days</td>
+<td></td>
+<td>N/A</td>
+<td>N/A</td>
+</tr>
+
+<tr>
+<td><?php echo date('Y')-1; ?> annual entitlement</td>
+<td><?php echo getAnnualLeaveEntitlement( (date('Y')-1).'-12-31' )?> days</td>
+<td><?php echo PERSONAL_LEAVE_ANNUAL_ENTITLEMENT?> days</td>
+<td><?php echo calculateMedicalLeaveBalance((date('Y')-1) . '-12-31')?> days</td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+
+<tr>
+<td><?php echo date('Y')-1; ?> year to date Leave</td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+
+<tr>
+<td><?php echo date('Y')-1; ?> year end balance</td>
+<td><?php echo getTotalLeaveEntitlement(date('Y')-1 . '-12-31') ?> days</td>
+<td></td>
+<td><?php echo calculateMedicalLeaveBalance() ?> days</td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+
+</div>
+<?php */?>
+<?php
+$selected_year = new DateTime($selectedDate);
+$selected_year = $selected_year->format('Y');
+?>
+
+<form id="balanceForm" action="" method="get" enctype='multipart/form-data'>
+  <h2 id="list_header">
+    Leave Balance<br>    
+    <div class="filter">    
+      <!--<label>Leave balance calculation counted up until</label>
+      <div class="input-icons">
+        <i class="fa-regular fa-calendar-days fa-xl"></i>
+        <input type="text" id="selectdate" name="selectdate" class="form-control form-control-lg"  readonly value="<?php echo $selectedDate?>" />
+      </div>-->
+    </div>
+  </h2>
+  <p style="color:red">All the balance does not include any pending and approved records.</p>
+  <?php
+
+      $type_of_employment = $_SESSION['login_account']['type_of_employment'];
+
+      ?>
+
+    <div class="table-responsive">
+      <table class="table table-bordered table-with-line " style="width:100%">
+        <thead>
+          <tr>
+            <td></td>
+            <td colspan="4">
+            <div class="input-group">
+              <span class="input-group-text" ><strong>Leave balance calculation counted up until</strong></span>
+            <input type="text" id="selectdate" name="selectdate" class="form-control"  readonly value="<?php echo $selectedDate?>"     />
+            </div>
+        </td>
+      </tr>
+
+          <tr>
+            <th colspan="2"></th>
+            <th>leave remaining up to <?php echo $selectedDate?></th>
+            <th><?php echo $selected_year?> year end leave entitlement</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <?php if($type_of_employment=='fulltime'): ?>
+              <td><strong>Vacation Leave</strong></td>
+              <td>Paid</td>
+              <td><?php echo calculateTotalLeaveEntitlement( $selectedDate, $id )?> days</td>
+              <td><?php echo calculateTotalLeaveEntitlement( $selected_year.'-12-31' , $id)?> days</td>
+            <?php endif; ?>
+          </tr>
+
+          <?php if($type == 'federal'): ?>
+          <tr>
+            <td colspan="4">&nbsp;</td>
+          </tr>
+
+
+          <tr>
+            <td><strong>Personal Leave</strong></td>
+
+            <td>Paid</td>
+            <td><?php echo calculatePersonalLeaveBalance( $selectedDate, $id, PAID_LEAVE, $bShowDebug=true, '').' days' ?></td>
+            <td><?php echo calculatePersonalLeaveBalance($selected_year . '-12-31', $id, PAID_LEAVE, $bShowDebug=true, '') .' days' ?></td>
+          </tr>
+
+
+
+          <tr>
+            <td></td>
+            <td>UnPaid</td>
+            <td><?php echo calculatePersonalLeaveBalance( $selectedDate, $id, UNPAID_LEAVE, $bShowDebug=true, '').' days' ?></td>
+            <td><?php echo calculatePersonalLeaveBalance($selected_year . '-12-31', $id, UNPAID_LEAVE, $bShowDebug=true, '') .' days' ?></td>
+          </tr>
+          <?php endif; ?>
+          <tr>
+            <td colspan="4">&nbsp;</td>
+          </tr>
+
+
+        <tr>
+          <td><strong>Medical Leave</strong></td>
+          <td>Paid</td>
+          <td><?php echo $selected_year==date('Y')? calculateMedicalLeaveBalance( $selectedDate, $id, PAID_LEAVE,true,'',$type).' days' : 'N/A'?></td>
+          <td><?php echo $selected_year==date('Y') ? calculateMedicalLeaveBalance($selected_year . '-12-31', $id, PAID_LEAVE,true,'',$type) .' days' : 'N/A' ?></td>
+        </tr>
+        <?php if($type == 'bc'): ?>
+        <tr>
+          <td></td>
+          <td>UnPaid</td>
+          <td><?php echo $selected_year==date('Y')? calculateMedicalLeaveBalance( $selectedDate, $id, UNPAID_LEAVE,true,'',$type).' days' : 'N/A'?></td>
+          <td><?php echo $selected_year==date('Y') ? calculateMedicalLeaveBalance($selected_year . '-12-31', $id, UNPAID_LEAVE,true,'',$type) .' days' : 'N/A' ?></td>
+        </tr>
+        <?php endif; ?>
+        <tr>
+          <td colspan="4">&nbsp;</td>
+        </tr>
+
+          <tr>
+            <td><strong>Bereavement Leave</strong></td>
+            <?php if($type == 'federal'): ?>
+            <td>Paid</td>
+            <td><?php echo  calculateBereavementLeaveBalance( $selectedDate, $id, $type,PAID_LEAVE).' days' ?></td>
+            <td><?php echo  calculateBereavementLeaveBalance($selected_year . '-12-31',$id,$type, PAID_LEAVE) .' days'  ?></td>
+          <?php endif; ?>
+          </tr>
+
+          <tr>
+            <td></td>
+            <td>UnPaid</td>
+            <td><?php echo calculateBereavementLeaveBalance( $selectedDate, $id,$type ,UNPAID_LEAVE).' days' ?></td>
+            <td><?php echo calculateBereavementLeaveBalance($selected_year .'-12-31', $id,$type ,UNPAID_LEAVE) .' days' ?></td>
+          </tr>
+
+      </div>
+
+
+      </tbody>
+
+    </table>
+
+
+
+  </form>
+
+
+
+  <script type="text/javascript">
+
+
+  $(document).ready(function() {
+
+    $('#selectdate').datepicker({
+      changeMonth: true,
+      changeYear: true,
+      dateFormat: 'yy-mm-dd',
+      minDate: 0,
+      maxDate: "+12M",
+      yearRange:"-0:+2",
+      onSelect: function(selectedDate) {
+        // showLeaveBalance();
+        //$("body").addClass("loading");
+        $('#balanceForm').submit(); // form submit
+        //	 $("body").removeClass("loading");
+
+      }
+    });
+
+    /*$('#selectdate').change(function(){
+    $('#balanceForm').submit();
+  });  */
+
+
+ /* function showLeaveBalance(){
+    var selectdate = $('#selectdate').val();
+
+    $.ajax({
+      url:'ajax.php',
+      method:'POST',
+      data: { selected_date: selectdate },
+      success: function(response) {
+        if (response === '') {
+
+        } else {
+
+        }
+      },
+      error: function() {
+        $('#warningMessage').text('Error occurred. Please try again.');
+      }
+    });
+  }*/
+
+});
+
+
+</script>
+
+<?php include 'footer.php'; ?>

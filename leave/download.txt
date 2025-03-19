@@ -1,0 +1,27 @@
+<?php
+include_once 'include.php';
+
+$filename = basename($_GET['file']);
+$companyid = $_GET['companyid'];
+//$file = 'leave_record_report_from_20230509_to20231108_create_at20231108_165942.xlsx';
+
+$file = EXPORT_PATH.$companyid.'/'.$filename;
+
+
+if(!file_exists($file)){
+  die('file not found');
+}else {
+  header("Cache-Control: public");
+  header("Content-Description: File Transfer");
+  header("Content-Disposition: attachment; filename=$filename");
+  header("Content-Type: application/zip");
+  header("Content-Transfer-Encoding: binary");
+
+  // read the file from disk
+  readfile($file);
+}
+
+
+
+
+?>

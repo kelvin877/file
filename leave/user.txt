@@ -1,0 +1,1472 @@
+
+<?php include 'header.php';
+
+if(!isset($_SESSION["isLogin"]) || $_SESSION["isLogin"] !== true ){
+  header("location: login.php");
+  exit;
+}
+
+$role_account=$_SESSION['login_account']['role'];
+$admin_id=$_SESSION['login_account']['id'];
+
+$first_name=$_SESSION['login_account']['first_name'];
+$type_of_employment=$_SESSION['login_account']['type_of_employment'];
+
+
+
+
+/*function isAdmin(){
+$notallowedRole = array('user','payroll');
+
+return isset($_SESSION['login_account']) && !in_array($_SESSION['login_account']['role'], $notallowedRole);
+
+}
+
+function accessDenied() {
+    // Redirect the user to an access denied page or show a message
+    header('Location: user_profile.php');
+    exit();
+}
+
+
+if (!isAdmin()) {
+    // User is not an admin, deny access
+    accessDenied();
+}*/
+
+
+  $action =  isset($_REQUEST[ "action" ]) && trim($_REQUEST[ "action" ]) ? trim( $_REQUEST[ "action" ] ) : '';
+  $id = isset($_REQUEST['id']) && $_REQUEST['id'] ? $_REQUEST['id']: '';
+
+  $num_day_work_per_week = isset($_POST["num_hour_work_per_day"]) ? $_POST["num_hour_work_per_day"] : 5;
+  $num_hour_work_per_day = isset($_POST["num_day_work_per_week"]) ? $_POST["num_day_work_per_week"] : 8;
+
+
+  main();
+
+  function main(){
+    global $action,$role_account;
+
+    switch($action){
+      case "delete":
+
+        delete_item();
+        header("location:user_listing.php");
+        break;
+
+      case "updateadmin":
+
+         show_form();
+        break;
+
+      case "add":
+
+         show_form();
+        break;
+
+    }
+
+    //echo show_form();
+
+
+  }
+
+
+  /*function delete_item(){
+    global $id,$date;
+    $hdb = getConnection();
+
+    $sql = "Update user set is_delete='Y',deleted_at=:date where id=:id";
+    //$sql = "delete from user where id=:id";
+    $parameters= array('id'=> $id,'date'=>$date );
+    $hdb->query($sql, $parameters);
+
+
+  }*/
+
+
+
+
+
+  ?>
+
+
+  <?php
+
+  function checkstaffid($staffid){
+
+    $action =  isset($_REQUEST[ "action" ]) && trim($_REQUEST[ "action" ]) ? trim( $_REQUEST[ "action" ] ) : '';
+
+    $hdb = getConnection(); //definded in php-lib/databaseClass.php
+
+    switch($action){
+
+      case "add":
+
+        $sql = "select * from user where staff_id =:staffid";
+
+        $rData = $hdb->query($sql, array('staffid'=>$staffid));
+
+        break;
+
+      case "updateadmin":
+
+        $id=$_GET['id'];
+
+        $sql = "select * from user where id!=$id AND staff_id = :staffid";
+
+        $rData = $hdb->query($sql, array('staffid'=>$staffid));
+
+        break;
+    }
+
+
+    if(count($rData) > 0){
+
+      return true;
+
+    }else return false;
+
+  }
+
+
+  function checkemail($email){
+
+    $action =  isset($_REQUEST[ "action" ]) && trim($_REQUEST[ "action" ]) ? trim( $_REQUEST[ "action" ] ) : '';
+
+    $hdb = getConnection();
+
+    switch($action){
+
+      case "add":
+
+
+        $sql = "select * from user where email =:email";
+
+        $rData = $hdb->query($sql, array('email'=>$email));
+
+        break;
+
+      case "updateadmin":
+
+        $id=$_GET['id'];
+
+        $sql = "select * from user where id!=$id AND email = :email";
+
+        $rData = $hdb->query($sql, array('email'=>$email));
+
+        break;
+    }
+
+    if (count($rData) > 0) {
+
+			return true;
+
+		}else return false;
+
+
+  }
+
+
+
+
+
+  function show_form(){
+    include 'include.php';
+
+    global $date, $roleoption, $JOB_TYPE, $DIVISION, $company_option, $admin_id, $first_name, $id, $role_account;
+    global $num_day_work_per_week;
+
+
+    $hdb = getConnection();
+    $firstname = $lastname = $email = "";
+    $employeeid = $division = "";
+    $birthday = $joindate = "";
+    $jobtype =$role= $company="";
+    $action =  isset($_REQUEST[ "action" ]) && trim($_REQUEST[ "action" ]) ? trim( $_REQUEST[ "action" ] ) : '';
+    $firstname_err=$lastname_err=$email_err=$birthday_err=$joindate_err=$employeeid_err="";
+
+    $is_active = isset($is_active) ? $is_active : null;
+    $preset_day = isset($preset_day) ? $is_active : null;
+
+    switch ($action) {
+      case 'add':  // after "SAVE" button is clicked, new user informaton insert to DB
+
+          $form_name="Add User";
+          $is_active='';
+
+          if($_SERVER["REQUEST_METHOD"] == "POST"){
+            $role=trim($_POST["role"]);
+            $jobtype=trim($_POST["jobtype"]);
+            $division=trim($_POST["division"]);
+            //$company = trim($_POST["company"]);
+            //$preset_annual=trim($_POST["preset_annual"]);
+            $num_hour_work_per_day = trim($_POST["num_hour_work_per_day"]);
+            $num_day_work_per_week = trim($_POST["num_day_work_per_week"]);
+
+
+
+            if (isset($_POST["company"]) && is_array($_POST["company"])) {
+                // Convert the selected days into a comma-separated string
+                $company = implode(",", $_POST["company"]);
+
+            } else {
+                // If 'days' key is not found, initialize $off_day as an empty string
+                $company = "";
+                $company_err = "Please enter company.";
+            }
+
+
+
+            // Loop through the checked checkboxes
+            if (isset($_POST["days"])) {
+                // Convert the selected days into a comma-separated string
+                //$default_off_day = implode(",", $_POST["days"]);
+                $default_off_day = "Saturday,Sunday";
+                $save_button_on_leave_form = "Y";
+
+            } else {
+                // If 'days' key is not found, initialize $off_day as an empty string
+                $default_off_day = "";
+                $save_button_on_leave_form = "N";
+            }
+
+
+
+            if(empty(trim($_POST["firstname"]))){
+              $firstname_err = "Please enter first name.";
+            } else{
+              $firstname = trim($_POST["firstname"]);
+            }
+
+            if(empty(trim($_POST["lastname"]))){
+              $lastname_err = "Please enter last name.";
+            } else{
+              $lastname = trim($_POST["lastname"]);
+            }
+
+            if(checkemail($_POST["email"])){
+              $email_err = "This email is already in use";
+            }
+
+
+            if(empty(trim($_POST["email"]))){
+              $email_err = "Please enter email.";
+            } else{
+              $email = trim($_POST["email"]);
+            }
+
+
+
+            if(checkstaffid($_POST["employeeid"])){
+              $employeeid_err = "The staff id is already existed";
+            }
+
+            if(empty(trim($_POST["employeeid"]))){
+              $employeeid_err = "Please enter Employee id.";
+            } else{
+              $employeeid = trim($_POST["employeeid"]);
+            }
+
+
+
+            /*if(empty(trim($_POST["birthday"]))){
+              $birthday_err = "Please enter Birthday.";
+            } else{
+              $birthday = trim($_POST["birthday"]);
+            }*/
+
+            if($role=='user' || $role =='supervisor'){
+              if(empty(trim($_POST["joindate"]))){
+                $joindate_err = "Please enter Join Date.";
+              } else{
+                $joindate = trim($_POST["joindate"]);
+              }
+            }else {
+              $joindate ='0000-00-00';
+            }
+
+
+
+
+
+            if(empty($firstname_err)&& empty($lastname_err) && empty($email_err) && empty($employeeid_err) && empty($company_err) && empty($birthday_err) && empty($joindate_err)){
+
+              $_SESSION["complete"]=true;
+
+
+              //set the preset_annual as 0 under this condition
+              if($jobtype=='parttime'||($role == 'admin' || $role == 'payroll' || $role =='executive')){
+                $preset_annual = 0;
+                $num_day_work_per_week = 0;
+                $num_hour_work_per_day=0;
+
+              }
+
+              $sql="Insert Into user set first_name=:firstname, last_name=:lastname, email=:emailaddress,created_by_id=:created_by_id,created_by_name=:created_by_name,
+              staff_id=:employeeid,division=:division,birthday=:birthday,joindate=:joindate,role=:role,created_at=:date,type_of_employment=:jobtype,company=:company,default_off_day=:default_off_day, num_day_work_per_week=:num_day_work_per_week, num_hour_work_per_day=:num_hour_work_per_day,save_button_on_leave_form=:save_button_on_leave_form ";
+
+
+              $parameters=array('firstname'=>$firstname,'lastname'=>$lastname,'created_by_id'=>$admin_id,'created_by_name'=>$first_name,
+              'emailaddress'=>$email,'employeeid'=>$employeeid,
+              'division'=>$division,'birthday'=>$birthday,'joindate'=>$joindate,'role'=>$role,'jobtype'=>$jobtype,
+              'company'=>$company,'date'=>$date,'default_off_day'=>$default_off_day,'num_day_work_per_week'=>$num_day_work_per_week,'num_hour_work_per_day' => $num_hour_work_per_day,'save_button_on_leave_form'=>$save_button_on_leave_form );
+
+              //echo $birthday;
+
+
+              $hdb->query($sql,$parameters);
+
+              $last_id = $hdb->lastInsertId();
+
+              //track_annual_update($last_id,$preset_annual,$admin_id,$first_name);
+
+              $_SESSION['save']='save_success';
+              redir("user_listing.php");
+            }
+
+
+
+          }
+
+      break;
+
+      case 'updateadmin':
+
+          $form_name="Edit User";
+          $id=$_GET['id'];
+
+          if(!filter_var($id,FILTER_VALIDATE_INT)){
+            header("Location:admin_add.php?action=add");
+          }
+
+
+
+
+          // update user information
+          if($_SERVER["REQUEST_METHOD"] == "POST"){
+            $role=trim($_POST["role"]);
+            $jobtype=trim($_POST["jobtype"]);
+            $division=trim($_POST["division"]);
+            //$company = trim($_POST["company"]);
+            $preset_annual=trim($_POST["preset_annual"]);
+
+            $num_day_work_per_week = trim($_POST["num_day_work_per_week"]);
+            $num_hour_work_per_day = trim($_POST["num_hour_work_per_day"]);
+
+
+            if (isset($_POST["company"]) && is_array($_POST["company"])) {
+                // Convert the selected days into a comma-separated string
+                $company = implode(",", $_POST["company"]);
+            } else {
+                //$company = "";
+                /*if($company == ""){
+                  $company_err = "Company error";
+                }*/
+
+
+            }
+
+
+            if($jobtype=='parttime' ||($role == 'admin' || $role == 'payroll' || $role =='executive')){
+              $preset_annual = 0;
+              $num_day_work_per_week = 0;
+              $num_hour_work_per_day=0;
+
+            }
+
+
+              // Loop through the checked checkboxes
+              if (isset($_POST["days"])) {
+                  // Convert the selected days into a comma-separated string
+                  //$default_off_day = implode(",", $_POST["days"]);
+                  $default_off_day = "Saturday,Sunday";
+                  $save_button_on_leave_form = "Y";
+
+
+              } else {
+                  // If 'days' key is not found, initialize $off_day as an empty string
+                  $default_off_day = "";
+                  $save_button_on_leave_form ="N";
+              }
+
+
+
+            if(empty(trim($_POST["firstname"]))){
+              $firstname_err = "Please enter first name.";
+            } else{
+              $firstname = trim($_POST["firstname"]);
+            }
+
+            if(empty(trim($_POST["lastname"]))){
+              $lastname_err = "Please enter last name.";
+            } else{
+              $lastname = trim($_POST["lastname"]);
+            }
+
+            if(checkemail($_POST["email"])){
+              $email_err = "This email is already in use";
+            }
+
+
+            if(empty(trim($_POST["email"]))){
+              $email_err = "Please enter email.";
+            } else{
+              $email = trim($_POST["email"]);
+            }
+
+
+
+            if(checkstaffid($_POST["employeeid"])){
+              $employeeid_err = "The staff id is already existed";
+            }
+
+            if(empty(trim($_POST["employeeid"]))){
+              $employeeid_err = "Please enter Employee id.";
+            } else{
+              $employeeid = trim($_POST["employeeid"]);
+            }
+
+
+            /*if(empty(trim($_POST["birthday"]))){
+              $birthday_err = "Please enter Birthday.";
+            } else{
+              $birthday = trim($_POST["birthday"]);
+            }*/
+
+            if(empty(trim($_POST["joindate"]))){
+              $joindate_err = "Please enter Join Date.";
+            } else{
+              $joindate = trim($_POST["joindate"]);
+            }
+
+            if(empty($firstname_err)&& empty($lastname_err) && empty($email_err) && empty($employeeid_err)  && empty($birthday_err) && empty($joindate_err)){
+
+              $_SESSION["complete"]=true;
+
+              $sql="Update user set first_name=:firstname, last_name=:lastname, email=:emailaddress,modified_by_id=:modified_by_id,modified_by_name=:modified_by_name,save_button_on_leave_form=:save_button_on_leave_form,
+              staff_id=:employeeid,division=:division,birthday=:birthday,joindate=:joindate,role=:role ,updated_at=:date,type_of_employment=:jobtype,default_off_day=:default_off_day,num_day_work_per_week=:num_day_work_per_week,num_hour_work_per_day=:num_hour_work_per_day
+               Where id=:id";
+
+
+              $parameters=array('firstname'=>$firstname,'lastname'=>$lastname,'modified_by_id'=>$admin_id,'modified_by_name'=>$first_name,
+              'emailaddress'=>$email,'employeeid'=>$employeeid,
+              'division'=>$division,'birthday'=>$birthday,'joindate'=>$joindate,'role'=>$role,'jobtype'=>$jobtype,'default_off_day'=>$default_off_day,'save_button_on_leave_form'=>$save_button_on_leave_form,
+              'id'=>$id,'date'=>$date,'num_hour_work_per_day'=>$num_hour_work_per_day,'num_day_work_per_week'=>$num_day_work_per_week);
+
+              //echo $birthday;
+
+              $hdb->query($sql,$parameters);
+
+
+
+              //track_annual_update($id,$preset_annual,$admin_id,$first_name);
+              $_SESSION['save']='save_success';
+              //redir("user_listing.php");
+            }
+            $balance_date=date('Y-m-d',time()-86400);
+            if(isset($_SESSION['prev_jobtype']) && $_POST['jobtype'] != $_SESSION['prev_jobtype'] && $_SESSION['prev_jobtype']=='parttime'){
+              $sSql = "select * from leave_balance where user_id=:user_id and balance_date='$balance_date' and type_of_leave='ANNUAL' ";
+        		  $params = array('user_id' => $id);
+        		  $balanceRecord = $hdb->query($sSql, $params);
+
+              if (count($balanceRecord) <=0){
+        			  $ttl_annualleave_taken_before_this_date =  $balance_date;
+        			$balance = calculateTotalLeaveEntitlement($balance_date, $id, true, true, $ttl_annualleave_taken_before_this_date);
+        			$sSql ="insert into leave_balance set user_id=:user_id, balance=:balance, balance_date='$balance_date', type_of_leave='ANNUAL', created_at='".date('Y-m-d H:i:s')."' , created_by='SYSTEM' ";
+        			$params = array('user_id' => $id, 'balance' => $balance);
+        			$hdb->query($sSql,$params);
+        		//	echo $hdb->odo_sql_debug($sSql,$params);
+        		  }
+
+            }
+            redir("user_listing.php");
+
+
+          }else {
+
+
+          // retrieve user information from DB
+            if($id){
+              $sql = "select * from user where id =$id";
+              $reportResult=$hdb->query($sql);
+              if(count($reportResult)>0){
+                $value=$reportResult[0];
+                //foreach ($reportResult as $key => $value) {
+
+                $firstname=$value['first_name'];
+                $lastname=$value['last_name'];
+                $email=$value['email'];
+
+                $employeeid=$value['staff_id'];
+                $division=$value['division'];
+                $birthday=$value['birthday'];
+                $joindate=$value['joindate'];
+                $role=$value['role'];
+                $type_of_employment=$value['type_of_employment'];
+                $jobtype =$value['type_of_employment'];
+                $company =$value['company'];
+                $default_off_day=$value['default_off_day'];
+                $preset_day=$value['custom_annual_leave_entitlement'];
+                $num_day_work_per_week=$value['num_day_work_per_week'];
+                $num_hour_work_per_day=$value['num_hour_work_per_day'];
+                $is_active =$value['is_active'];
+
+                $_SESSION['prev_jobtype']=$jobtype;
+
+
+
+
+              }
+
+            }
+
+
+
+
+          }
+          break;
+
+
+    }
+
+  ?>
+
+
+
+  <section class="vh-100 gradient-custom">
+
+      <div class="row justify-content-center align-items-center">
+        <div class="col-12 col-lg-9 col-xl-7">
+          <div class="card shadow-2-strong card-registration" style="border-radius: 15px;">
+            <div class="card-body p-4 p-md-5">
+              <h3 class="mb-4 pb-2 pb-md-0 mb-md-5"><?php echo $form_name; ?></h3>
+
+
+
+              <form action="" method="post">
+
+                <div class="row">
+                  <div class="col-md-6 mb-4">
+                    <?php $readonly = ($role_account == 'payroll' || $is_active =='N' ) ? 'readonly' : ''; ?>
+                    <div class="form-outline">
+                      <label class="form-label" for="firstName">First Name</label>
+                      <input type="text" id="firstName" name="firstname" class="form-control form-control-lg <?php echo (!empty($firstname_err)) ? 'is-invalid' : '';  ?>" value="<?php echo isset($_POST['firstname'])? $_POST['firstname'] : $firstname; ?>" <?php echo $readonly; ?> placeholder="First name" />
+                      <span class="invalid-feedback"><?php echo $firstname_err; ?></span>
+                    </div>
+
+
+                  </div>
+                  <div class="col-md-6 mb-4">
+
+                    <div class="form-outline">
+                      <label class="form-label" for="lastName">Last Name</label>
+                      <input type="text" id="lastName" name="lastname" class="form-control form-control-lg <?php echo (!empty($lastname_err)) ? 'is-invalid' : '';  ?>" value="<?php echo isset($_POST['lastname'])? $_POST['lastname'] : $lastname; ?>" <?php echo $readonly; ?> placeholder="Last name"/>
+                      <span class="invalid-feedback"><?php echo $lastname_err; ?></span>
+                    </div>
+
+                  </div>
+                </div>
+
+
+
+                <div class="row">
+                  <div class="col-md-6 mb-4 pb-2">
+
+                    <div class="form-outline">
+                      <label class="form-label" for="emailAddress">Email (Used for login)</label>
+                      <input type="email" id="emailAddress" name="email" class="form-control form-control-lg <?php echo (!empty($email_err)) ? 'is-invalid' : '';  ?>" value="<?php echo isset($_POST['emailaddress'])? $_POST['emailaddress'] : $email; ?>" <?php echo $readonly; ?> placeholder="Email address" />
+                      <span class="invalid-feedback"><?php echo $email_err; ?></span>
+                    </div>
+
+                  </div>
+                  <div class="col-md-6 mb-4 pb-2">
+                    <label class="form-label select-label">Choose User Type</label>
+                    <select class="form-select form-control-lg" id="role" name="role" <?php echo ($role_account == 'payroll' || $is_active =='N') ? 'disabled' : ''; ?>>
+
+                      <?php
+                      /*$roleoption = array(
+                        'user'=>'User',
+                        'supervisor' => 'Supervisor',
+                        'admin' => 'Admin',
+                        'payroll' => 'Payroll',
+                        'executives' => 'Executives'
+                      );*/
+
+                      foreach ($roleoption as $value => $label) {
+                       $selected = ($role == $value) ? 'selected' : '';
+                        echo "<option value='$value' $selected>$label</option>";
+                      }
+
+                       ?>
+
+                    </select>
+
+
+
+                  </div>
+                </div>
+
+
+                <div class="row">
+                  <div class="col-md-6 mb-4 pb-2">
+
+                    <div class="form-outline">
+                      <label class="form-label" for="company">Choose Company</label>
+                      <select multiple="multiple" class="SlectBox" name="company[]"     <?php echo ( $action =='updateadmin' ||  $role_account == 'payroll' || $is_active =='N') ? 'disabled' : ''; ?>>
+
+                        <?php
+                        /*$company_option = array(
+                          'eseelynx'=>'Eseelynx',
+
+                        );*/
+
+                        if(isset($company)){
+                          $selectedCompanies = explode(',',$company);
+                        }else {
+                          $selectedCompanies = array();
+                        }
+
+
+                        if ($_SERVER["REQUEST_METHOD"] === "POST") {
+                            // Get the selected days from the submitted form and merge it with $selectedDaysArray
+                            $selectedCompanies = array_merge($selectedCompanies, isset($_POST["company"]) ? $_POST["company"] : array());
+                        }
+                        $sql = "select * from company";
+                        $company_option=$hdb->query($sql);
+
+                        foreach ($company_option as $value =>$label) {
+                            $value = $label['id']; // Replace 'company_id' with the actual column name for the option value
+                            $label = $label['company_name']; // Replace 'company_name' with the actual column name for the option label
+
+                            // Check if the value is in the selectedCompanies array
+                            $selected = in_array($value, $selectedCompanies) ? 'selected' : '';
+
+                            echo "<option value='$value' $selected>$label</option>";
+                        }
+
+                        /*foreach ($company_option as $value => $label){
+                          $selected = (in_array($value, $selectedCompanies))  ? 'selected' : '';
+                           echo "<option value='$value' $selected>$label</option>";
+                        }*/
+
+                         ?>
+                      </select>
+                      <?php
+                      // Check if the form is submitted and 'company' is empty
+                      if ($_SERVER["REQUEST_METHOD"] === "POST" && empty($_POST["company"])) {
+                          echo '<div class="error-message">Please select at least one company</div>';
+                      }
+                      ?>
+                    </div>
+
+                  </div>
+                  <div class="col-md-6 mb-4 pb-2">
+
+                    <div class="form-outline">
+                      <label class="form-label" for="Division">Division</label>
+
+                      <select class="form-select form-control-lg" name="division" <?php echo ($role_account == 'payroll' || $is_active =='N') ? 'disabled' : ''; ?>>
+
+                        <?php
+                        foreach ($DIVISION as $value => $label){
+                          $selected = ($division == $value) ? 'selected' : '';
+                           echo "<option value='$value' $selected>$label</option>";
+                        }
+
+                        ?>
+                      </select>
+
+                    </div>
+
+                  </div>
+                </div>
+                <div class="row">
+
+                  <div class="col-md-6 mb-4 pb-2">
+
+                    <div id="joindatebox" class="form-outline">
+                      <label class="form-label" for="Join Date">Join Date</label>
+                      <?php //if($role_account != 'payroll'):?>
+                        <?php
+                        if($role_account != 'payroll'){
+
+                        if($joindate != "" ){
+                          $datepicker = "";
+                          $message = "";
+
+                        }else {
+                          $datepicker = "joindatepicker";
+                          $message ="Please enter the correct join date. This information cannot be change at the later time.";
+                        }
+                      }else {
+                        $datepicker = "";
+                        $message = "";
+                      }
+                         ?>
+
+                      <input id="<?php echo $datepicker; ?>" name="joindate" readonly='true' class="form-control form-control-lg <?php echo (!empty($joindate_err)) ? 'is-invalid' : '';  ?>" value="<?php echo isset($_POST['joindate'])? $_POST['joindate'] : $joindate; ?>" placeholder="First date to work in this company" />
+                      <small style="color:red;"><?php echo $message; ?></small>
+                    <?php //endif; ?>
+                    <?php //if($role_account == 'payroll'): ?>
+                      <!--<input id="" name="joindate" readonly='true' class="form-control form-control-lg <?php echo (!empty($joindate_err)) ? 'is-invalid' : '';  ?>" value="<?php echo isset($_POST['joindate'])? $_POST['joindate'] : $joindate; ?>" /> -->
+                  <?php //endif; ?>
+
+                      <span class="invalid-feedback"><?php echo $joindate_err; ?></span>
+                    </div>
+
+                  </div>
+
+
+                  <div id="job_type_box"  class="col-md-6 mb-4 pb-2">
+
+                    <label class="form-label select-label">Choose Job Type</label>
+
+                    <select class="form-select form-control-lg" id="jobtype" name="jobtype" <?php echo ($role_account == 'payroll' || $is_active =='N') ? 'disabled' : ''; ?>>
+
+
+                      <?php
+
+                      foreach ($JOB_TYPE as $value => $label) {
+                       $selected = ($jobtype == $value) ? 'selected' : '';
+                        echo "<option value='$value' $selected>$label</option>";
+                      }
+
+
+                      ?>
+
+                    </select>
+
+                  </div>
+
+                </div>
+
+                <div class="row">
+
+
+
+                  <div class="col-md-6 mb-4 pb-2">
+
+                    <div class="form-outline">
+                      <label class="form-label" for="employeeid">Employee ID</label>
+                      <input type="employeeid" id="employeeid" name="employeeid" class="form-control form-control-lg <?php echo (!empty($employeeid_err)) ? 'is-invalid' : '';  ?>" value="<?php echo isset($_POST['employeeid'])? $_POST['employeeid'] : $employeeid;?>" <?php echo $readonly; ?> placeholder="Employee ID" />
+                      <span class="invalid-feedback"><?php echo $employeeid_err; ?></span>
+                    </div>
+
+                  </div>
+
+                  <div class="col-md-6 mb-4 pb-2" style="display:none;">
+                    <div class="form-outline">
+                      <div id="num_hour_day_box" class="flexBox" >
+                      <label class="form-label" for="">Number of hour worked per day</label>
+                      <select class="form-control form-control-lg" name="num_hour_work_per_day" <?php echo ($role_account == 'payroll' || $is_active =='N' ) ? 'disabled' : ''; ?>>
+                        <?php
+
+                        $selectedNumber = isset($_POST['num_hour_work_per_day']) ? $_POST['num_hour_work_per_day'] : '';
+
+                        for($hour = 3; $hour<=10; $hour+=0.5 ){
+                          $selected = (isset($num_hour_work_per_day) && $num_hour_work_per_day == $hour) ? 'selected' : ($selectedNumber == $hour ? 'selected' : '');
+                          echo "<option value='$hour' $selected>$hour hours</option>";
+                        }
+                        /*if (!empty($num_hour_work_per_day)) {
+                          $selected = ($selectedNumber == $num_hour_work_per_day) ? 'selected' : '';
+                          echo "<option value=\"$preset_day\" $selected>$num_hour_work_per_day</option>";
+                        }*/
+
+
+                         ?>
+
+                      </select>
+                    </div>
+                    </div>
+
+                  </div>
+
+                </div>
+
+
+                <div class="row">
+
+
+                  <div class="col-md-6 mb-4 pb-2">
+                    <div class="form-outline">
+                      <div id="num_week_day_box" class="flexBox" style="display:none;">
+                      <label class="form-label" for="">Number of days worked per week</label>
+                      <select class="form-select form-control-lg" name="num_day_work_per_week" <?php echo ($role_account == 'payroll' || $is_active =='N') ? 'disabled' : ''; ?> >
+                        <?php
+
+                        //$selectedNumber = isset($_POST['num_day_work_per_week']) ? $_POST['num_day_work_per_week'] : '';
+
+                          for ($day = 1; $day <= 7; $day++) {
+                            $selected = $num_day_work_per_week== $day ? 'selected' : '' ;
+                            echo "<option value='$day' $selected>$day</option>";
+                          }
+
+                         ?>
+                      </select>
+                    </div>
+                    </div>
+
+                  </div>
+
+
+
+                </div>
+
+
+
+                <div class="row">
+                  <?php
+                  $actionValue = $_GET['action'];
+                  $type_of_employment=$_SESSION['login_account']['type_of_employment'];
+
+
+                  if($actionValue==='updateadmin' && $jobtype != 'parttime'):
+
+
+                   ?>
+                   <?php endif; ?>
+
+
+                  <div class="col-md-6 mb-4 pb-2">
+                  <div id="show_all_balance_box">
+                    <?php //if($action == 'updateadmin'):
+                      $hdb = getConnection();
+                      $sql = "select * from leave_balance where user_id=:id Order by balance_date desc";
+                      $parameters = array('id'=>$id);
+                      $result = $hdb->query($sql,$parameters);
+
+                      if(count($result)>0 && $action == 'updateadmin'):
+
+
+                      ?>
+                    <button class="modal_button2" type="button" name="button">Show all starting balance record(s)</button>
+                    <?php endif; ?>
+                  </div>
+                    <?php include 'starting_balance.php'; ?>
+
+                  </div>
+
+
+
+
+                </div>
+
+              <?php if($actionValue=='updateadmin'): ?>
+
+                <div class="row mt-5" >
+
+
+              <?php //if($role_account!='payroll' || $is_active == 'Y'): ?>
+                  <div id="annualbox" class="col-md-6 mb-4 pb-2" style="display:none;">
+
+                    <?php
+                      if($role_account !='payroll'){
+                        if ($is_active == 'Y') {
+                          $display='';
+                        }else {
+                          $display='display:none;';
+                        }
+                      }else {
+                        $display='display:none;';
+                      }
+
+                     ?>
+
+                     <?php
+                    $hdb = getConnection();
+
+                    $reportResult=array();
+                    if($id){
+                      $content = 'Default Base annual leave entitlement:';
+                      $sql = "SELECT * from custom_annual_leave where user_id =$id ORDER BY id desc";
+                      $reportResult=$hdb->query($sql);
+
+                      if(count($reportResult)>0){
+                        $content = 'Base annual leave was overrided and the entitlement is :';
+                      }
+                    ?>
+
+                    <label class="mb-4"><?php echo $content; ?>
+                      <span ><?php echo $preset_day; ?></span>
+                      day(s)
+                    </label>
+
+                  <?php } ?>
+
+
+
+                  <button style="<?php echo $display; ?>" class="custom_annual_button" type="button" name="button">Click here to override the base annual leave entitlement</button>
+
+                </div>
+              <?php //endif; ?>
+
+
+                <div class="modal fade" id="custom_annual" tabindex="-1" role="dialog" aria-labelledby="myModalLabel" aria-hidden="true">
+                  <div class="modal-dialog modal-lg" role="document">
+                    <div class="modal-content">
+                      <div class="modal-header">
+                        <h5 class="modal-title" id="myModalLabel">Override the base annual leave entitlement</h5>
+                        <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                          <span aria-hidden="true">&times;</span>
+                        </button>
+                      </div>
+                      <div class="modal-body">
+                        <p>Select the base annual leave entitlement:</p>
+
+                        <select class="form-select form-control-lg" name="preset_annual" id="preset_annual">
+
+                        <?php
+
+                        $selectedNumber = isset($_POST['preset_annual']) ? $_POST['preset_annual'] : '';
+                        for ($i = 10; $i <= 30; $i++) {
+                          $selected = (isset($preset_day) && $preset_day == $i) ? 'selected' : ($selectedNumber == $i ? 'selected' : '');
+                          echo "<option value=\"$i\" $selected>$i</option>";
+
+                        }
+                        /*if (!empty($preset_day)) {
+                          $selected = ($selectedNumber == $preset_day) ? 'selected' : '';
+                          echo "<option value=\"$preset_day\" $selected>$preset_day</option>";
+                        }*/
+
+                        ?>
+
+                        </select>
+                        <br>
+                        <p style="color:red">The selected annual leave entitlement will start today after clicking the "SUBMIT" button.</P>
+
+
+                      </div>
+
+                      <div class="modal-footer">
+
+                        <button type="button" class="btn btn-secondary close" data-dismiss="modal">Close</button>
+                        <button type="submit"  name="save" id="save" data-firstname="<?php echo $first_name; ?>" data-adminid="<?php echo $admin_id; ?>" data-id="<?php echo $id; ?>"  class="btn btn-primary save-submit-btn">submit</button>
+
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="col-md-6 mb-4 pb-2">
+
+
+
+
+                    <?php
+
+
+
+
+                    if($actionValue==='updateadmin' && $jobtype != 'parttime' && count($reportResult)>0): ?>
+                     <div  id="show_all_annual_box">
+                     <label class="mb-4">
+                      <span >&nbsp;<br></span>
+                    </label>
+                    <button class="modal_button" type="button" name="button">Show all override base annual leave entitlement record(s)</button>
+                    </div>
+                  <?php endif; ?>
+
+                    <div class="modal fade" id="modal_id" tabindex="-1" role="dialog" aria-labelledby="myModalLabel" aria-hidden="true">
+                      <div class="modal-dialog modal-lg" role="document">
+                        <div class="modal-content">
+                          <div class="modal-header">
+                            <h5 class="modal-title" id="myModalLabel">All override base annual record(s)</h5>
+                            <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                              <span aria-hidden="true">&times;</span>
+                            </button>
+                          </div>
+                          <div class="modal-body">
+                            <table id="formtable" class="table table-striped " >
+                              <thead>
+                                <tr>
+                                  <th>Last update date</th>
+                                  <th>Base annual leave entitlement</th>
+                                  <th>Start date</th>
+                                  <th>End date</th>
+                                  <th>Updated by</th>
+
+                                </tr>
+                              </thead>
+
+                              <tbody>
+                                <?php
+                                /*$hdb = getConnection();
+
+                                $reportResult=array();
+                                if($id){
+                                  $sql = "SELECT * from custom_annual_leave where user_id =$id ORDER BY id desc";
+                                  $reportResult=$hdb->query($sql);
+                                }*/
+
+
+
+
+                                if(count($reportResult)>0){
+                                  foreach ($reportResult as $key => $value) {
+                                    $update_date=$value['updated_at'];
+                                    $annual_day=$value['annual_day'];
+                                    $updated_by=$value['updated_by'];
+                                    $start_date =$value['start_date'];
+                                    $end_date =$value['end_date'];
+
+
+                                 ?>
+                                <tr>
+                                  <td><?php echo $update_date; ?></td>
+                                  <td><?php echo $annual_day; ?></td>
+                                  <td><?php echo  $start_date;?></td>
+                                  <td><?php echo  $end_date;?></td>
+                                  <td><?php echo $updated_by; ?></td>
+                                <?php }}else {
+                                  $preset_day = 10;
+                                } ?>
+                                </tr>
+                              </tbody>
+
+
+                            </table>
+
+                          </div>
+                          <div class="modal-footer">
+                            <button type="button" class="btn btn-secondary close" data-dismiss="modal">Close</button>
+
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+
+
+                </div>
+
+
+
+                </div>
+
+              <?php endif; ?>
+
+
+               <!-- <div id="parttimeCheckbox" class="" style=""> -->
+
+                <div id="regular_day_off_box" class="form-check form-switch" >
+                 <input type="checkbox"  name="days" valign="top" id="regular_day_off" <?php if(!empty($default_off_day)) echo 'checked'; ?> <?php echo ($role_account == 'payroll' || $is_active =='N') ? 'disabled' : ''; ?>>
+
+                <label class="checkbox-inline" for="regular_day_off" >Check if the user is entitled to regular day off on Saturday and Sunday.
+                </label>
+                <p>If not, the user will select the regular off day when filling the LEAVE APPLICATION.</p>
+                <?php
+            //$off_day ='';
+            //print_r()
+
+            /*if (isset($default_off_day)) {
+                $selectedDaysArray = explode(',', $default_off_day);
+            } else {
+                $selectedDaysArray = array(); // Initialize an empty array
+            }
+
+
+
+            // Define the list of all possible days for the checkboxes
+            $days = array('Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday');
+
+            // Loop through all days and check the checkboxes based on the values in the array
+            foreach ($days as $day) {
+                $checked = (in_array($day, $selectedDaysArray)) ? 'checked' : '';
+                echo '<label class="radioCheck" for="checkbox_' . strtolower($day) . '">' . $day . '
+                        <input type="checkbox" name="days[]" id="checkbox_' . strtolower($day) . '" value="' . $day . '" ' . $checked . '>
+                      </label>';
+            }*/
+
+
+            ?>
+
+
+
+              </div>
+
+              <!--</div> -->
+
+
+
+
+                <div class="row">
+
+                  <?php
+
+                  if($role_account !='payroll' ){
+                    if($is_active == 'Y'){
+                      $display = '';
+                    }elseif($is_active == 'N') {
+                      $display = 'display:none;';
+                    }else {
+                      $display = '';
+                    }
+
+                  }else {
+                    $display = 'display:none;';
+                  }
+
+
+                    ?>
+                  <div class="col-md-2 mt-4 ">
+                    <input style=" <?php echo $display; ?>;" type="submit" class="btn btn-primary btn-lg"  type="submit" value="Save" />
+                  </div>
+
+                  <div class="col-md-1 mt-4">
+                    <input  class="btn btn-primary btn-lg" onclick="redir(); return false;" type="button" value="<?php echo ($role_account === 'payroll' || $is_active =='N') ? 'Back' : 'Cancel'; ?>" />
+
+                  </div>
+                </div>
+
+              </form>
+
+
+
+            </div>
+          </div>
+        </div>
+      </div>
+
+  </section>
+
+
+
+
+
+
+
+
+
+<?php include 'footer.php'; ?>
+
+
+
+
+
+  <?php
+  } ?>
+
+
+  <script type="text/javascript">
+
+
+  $(document).ready(function() {
+
+    var currentDate = new Date();
+    var minDate = new Date(currentDate);
+    var maxDate = new Date(currentDate);
+
+
+
+
+    //minDate.setDate(currentDate.getDate() - 30);
+    maxDate.setDate(currentDate.getDate() + 30);
+
+    $("#joindatepicker").datepicker({
+        changeMonth: true,
+        changeYear: true,
+        dateFormat: "yy-mm-dd",
+        yearRange: "-100:+0",
+        //minDate: minDate,
+        maxDate: maxDate,
+        onSelect: function (selectedDate) {
+            // Show a confirmation dialog when a date is picked
+            //var selectedDate = new Date(dateText);
+            var confirmationMessage = "You have selected the date: " + selectedDate + ". Do you want to proceed?";
+            if (confirm(confirmationMessage)) {
+                // User confirmed, you can add your logic here
+                // For example, you can submit a form or perform an action
+                // You can access the selected date using selectedDate variable
+                // selectedDate contains the Date object for the selected date
+                $(this).val(dateText);
+            } else {
+                // User canceled the selection, you can add your logic here
+                $(this).val('');
+            }
+        }
+    });
+
+
+
+
+
+window.asd = $('.SlectBox').SumoSelect({ csvDispCount: 6 });
+
+
+    // Get the select element
+    var jobtypeSelect = $('#jobtype');
+    var usertype = $('#role');
+
+
+
+    // Get the checkbox div element
+    var parttimeCheckbox = $('#parttimeCheckbox');
+    var job_type_box = $('#job_type_box');
+    var annualbox = $('#annualbox');
+    var num_hour_day_box = $('#num_hour_day_box');
+    var num_week_day_box = $('#num_week_day_box');
+    var show_all_annual_box = $('#show_all_annual_box');
+    var show_all_balance_box = $('#show_all_balance_box');
+    var current_annual_box = $('#current_annual_box');
+    var joindatebox = $('#joindatebox');
+    var regular_day_off_box = $('#regular_day_off_box');
+
+    if(jobtypeSelect.val() === 'fulltime' && (usertype.val()==='supervisor'|| usertype.val()==='user') ){
+      annualbox.show();
+      num_hour_day_box.show();
+      num_week_day_box.show();
+      show_all_annual_box.show();
+      show_all_balance_box.show();
+      parttimeCheckbox.show();
+      job_type_box.show();
+      //joindatebox.show();
+      regular_day_off_box.show();
+      //current_annual_box.show();
+
+    }else {
+      annualbox.hide();
+      num_hour_day_box.hide();
+      num_week_day_box.hide();
+      show_all_annual_box.hide();
+      show_all_balance_box.hide();
+      parttimeCheckbox.hide();
+      //joindatebox.hide();
+      regular_day_off_box.hide();
+      //job_type_box.hide();
+      //current_annual_box.hide();
+
+
+    }
+
+    /*function updateSelectedValue() {
+         // Get the selected value from the dropdown
+         var selectedValue = $('#preset_annual').val();
+
+         // Display the selected value in the desired section
+         $('#selected_value').text(selectedValue);
+       }
+
+       // Attach an event listener to the dropdown change event
+       $('#preset_annual').change(function() {
+         // Update the displayed value when the dropdown changes
+         updateSelectedValue();
+       });
+
+       // Initially set and display the current value
+       updateSelectedValue();*/
+
+
+    jobtypeSelect.on('change', function() {
+      // Check if the selected value is "parttime"
+      if ($(this).val() === 'fulltime') {
+        annualbox.show();
+        num_hour_day_box.show();
+        num_week_day_box.show();
+        show_all_annual_box.show();
+        show_all_balance_box.show();
+        parttimeCheckbox.show();
+        regular_day_off_box.show();
+      } else {
+        annualbox.hide();
+        num_hour_day_box.hide();
+        num_week_day_box.hide();
+        show_all_annual_box.hide();
+        show_all_balance_box.hide();
+        parttimeCheckbox.hide();
+        regular_day_off_box.hide();
+      }
+    });
+
+
+    usertype.on('change', function() {
+      // Check if the selected value is "parttime"
+      if ($(this).val() === 'supervisor' || $(this).val() === 'user') {
+        annualbox.show();
+        num_hour_day_box.show();
+        num_week_day_box.show();
+        job_type_box.show();
+        show_all_annual_box.show();
+        show_all_balance_box.show();
+        parttimeCheckbox.show();
+        joindatebox.show();
+        regular_day_off_box.show();
+      } else {
+        annualbox.hide();
+        num_hour_day_box.hide();
+        num_week_day_box.hide();
+        job_type_box.hide();
+        show_all_annual_box.hide();
+        show_all_balance_box.hide();
+        parttimeCheckbox.hide();
+        joindatebox.hide();
+        regular_day_off_box.hide();
+      }
+    });
+
+
+
+    // Check the initial selected value on page load
+    /*if (jobtypeSelect.val() === 'parttime') {
+      parttimeCheckboxDiv.show();
+    } else {
+      parttimeCheckboxDiv.hide();
+    }
+
+    // Add change event listener to the select element
+    jobtypeSelect.on('change', function() {
+      // Check if the selected value is "parttime"
+      if ($(this).val() === 'parttime') {
+        parttimeCheckboxDiv.show();
+      } else {
+        parttimeCheckboxDiv.hide();
+      }
+    });*/
+
+    function initializeModal(modalId) {
+      return new bootstrap.Modal(document.getElementById(modalId), {});
+    }
+
+
+    var myModal = initializeModal('modal_id');
+    var myModal2 = initializeModal('modal_id2');
+    var custom_annual = initializeModal('custom_annual');
+    var defaultPresetValue = $('#preset_annual').val(); // Store the default value on modal open
+
+
+    function resetDropdown() {
+        $('#preset_annual').val(defaultPresetValue);
+    }
+
+    $(document).on('click', '.modal_button', function() {
+          var claim_id = $(this).data('claimid');
+          console.log(claim_id);
+
+          $(".modal-body #claim_id").val(claim_id);
+          $(".modal-body .claim_id").text(claim_id);
+          myModal.show();
+        });
+
+
+    $('#modal_id .close').click(function() {
+      myModal.hide();
+    });
+
+
+
+    $(document).on('click', '.modal_button2', function() {
+          var claim_id = $(this).data('claimid');
+          console.log(claim_id);
+
+          $(".modal-body #claim_id").val(claim_id);
+          $(".modal-body .claim_id").text(claim_id);
+          myModal2.show();
+        });
+
+
+    $('#modal_id2 .close').click(function() {
+      myModal2.hide();
+    });
+
+
+
+
+    $(document).on('click', '.custom_annual_button', function() {
+
+      originalTextareaValue = $("#preset_annual").val();
+
+          custom_annual.show();
+        });
+
+
+    $('#custom_annual').on('hidden.bs.modal', function () {
+            resetDropdown();
+        });
+
+
+
+    $('#custom_annual .close').click(function() {
+      custom_annual.hide();
+    });
+
+
+
+    $('.save-submit-btn').click(function(e) {
+      //alert("hell0o");
+      e.preventDefault();
+
+      var annualday = $(".modal-body #preset_annual").val();
+      var id  = $(this).data('id');
+      var adminid  = $(this).data('adminid');
+      var firstname = $(this).data('firstname');
+
+
+      //alert(firstname);
+      $.ajax({
+        type: "POST",
+        url: "leave_record.ajax.php",
+
+        data: { action : 'save_custom_annual', annualday:annualday, id:id, adminid:adminid, firstname:firstname } ,
+
+        success: function(response){
+          response=JSON.parse(response);
+
+          location.reload(true);
+
+        },
+        error: function(){
+          alert("Error");
+        }
+      });
+
+    });
+
+
+
+
+
+
+  });
+
+
+
+
+
+
+
+
+  document.getElementById("cancelbutton").onclick = function () {
+    location.href = "user_listing.php";
+  };
+
+
+  function redir() {
+    var link = "user_listing.php"; // Replace with your desired link
+    var message = "Are you sure you want to continue?"; // Replace with your desired message
+
+    // Display a confirmation dialog with a link
+    //if (confirm(message)) {
+      window.location.href = link;
+    //}
+  }
+
+
+
+  $( function() {
+    $( "#birthdatepicker" ).datepicker({
+      changeMonth: true,
+      changeYear: true,
+      dateFormat: "yy-mm-dd",
+      yearRange:"-100:+0",
+      maxDate:"0"
+
+    });
+  } );
+
+
+
+
+
+
+
+  </script>

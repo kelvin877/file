@@ -1,0 +1,433 @@
+<?php
+include_once 'include.php';
+
+//$response= array();
+
+$hdb = getConnection();
+
+//echo $firstname;
+
+$response='';
+
+//echo $id;
+
+//print_r($_REQUEST);
+if(isset($_POST['action']) && $_POST['action'] == 'refresh'){
+
+  $role = $_POST['role'];
+  $company = $_POST['company'];
+
+  if($role == 'supervisor' || $role=='executive' || $role =='admin'){
+
+    if($role == 'supervisor' ){
+      $sql_check_role = " ROLE ='user' AND ";
+    }
+    elseif ($role == 'admin') {
+      $sql_check_role = " (ROLE = 'user' or ROLE = 'supervisor') AND   ";
+    }
+
+
+    else{
+      $sql_check_role = " ROLE ='supervisor' AND ";
+    }
+
+    if($role =='supervisor' || $role == 'executive'){
+      $sql_status = " And status='Pending' ";
+      $status = 'Pending: ';
+    }else {
+      $sql_status = " And status='Approved' ";
+      $status = 'Approved: ';
+    }
+
+    $companyArray = explode(',',$company);
+
+    $sql ="SELECT count(DISTINCT reference_id) AS total,
+           GROUP_CONCAT(DISTINCT c.company_name SEPARATOR ', ') AS combined_company_names
+           FROM user LEFT JOIN company AS c ON FIND_IN_SET(c.id,user.company) > 0
+           INNER JOIN leave_table ON leave_table.user_id = user.id
+            WHERE $sql_check_role
+            leave_table.is_cancel='N' $sql_status
+           AND (";
+     foreach ($companyArray as $index => $value) {
+         if ($index > 0) {
+
+             $sql .= " OR ";
+         }
+         $sql .= "FIND_IN_SET($value, company) > 0 OR FIND_IN_SET($value, user.company) > 0";
+     }
+
+     $sql .= ") ";
+
+     $result=$hdb->query($sql);
+
+     $total = $result[0]['total'];
+
+     //$response = $status.$result[0]['total'];
+     $response = array('status'=>$status, 'total'=>$total);
+
+     echo json_encode($response);
+  }
+
+}
+
+  if(isset($_POST['action']) && $_POST['action'] == 'deactivate_form'){
+
+    $id=$_POST['id'];
+    $deactivedate =$_POST['deactivedate'];
+
+    $sql ="Update user set is_active='N',deactive_at=:deactive_at  where id=:id";
+
+    $parameters = array('id'=>$id,'deactive_at'=>$deactivedate);
+
+    $hdb->query($sql,$parameters);
+
+    $response = array('success');
+
+    echo json_encode($response);
+
+  }
+
+
+
+
+
+
+
+
+if(isset($_POST['action'])  && $_POST['action'] == 'save_custom_annual'){
+  $id = $_POST['id'];
+  $annualday = $_POST['annualday'];
+  $adminid  = $_POST['adminid'];
+  $firstname = $_POST['firstname'];
+
+  track_annual_update($id,$annualday,$adminid,$firstname);
+
+  $sql = "Update user set custom_annual_leave_entitlement=:annualday where id=:id";
+
+  $parameters = array('id'=>$id,'annualday'=>$annualday);
+
+  $hdb->query($sql,$parameters);
+
+  $response = array('success');
+
+  echo json_encode($response);
+
+}
+
+if(isset($_POST['action'])  && $_POST['action'] == 'reject_form'){
+  $action='reject';
+
+  $email=$_POST['email'];
+
+  $claim_comment=$_POST['claim_comment'];
+
+  $claim_id=$_POST['claim_id'];
+
+  $fullname=$_POST['fullname'];
+
+  $id=$_POST['id'];
+
+  $result=send_email($claim_id,$action,$email,$claim_comment);
+
+  //echo send_email($claim_id,$action,$claim_comment);
+  //echo $reject_comment;
+  $sql="Update leave_table set reject_note=:comment,status='Rejected' where reference_id=:reference_id";
+
+  $parameters=array('comment'=>$claim_comment,'reference_id'=>$claim_id);
+
+  $hdb->query($sql,$parameters);
+
+  $leave_detail_sql = "select * from leave_detail where leave_record_id=:leave_record_id";
+  $leave_detail_sql_parameters = array('leave_record_id'=>$claim_id);
+  $result=$hdb->query($leave_detail_sql,$leave_detail_sql_parameters);
+
+  if(count ($result) >0){
+    $update_sql = "Update leave_detail set status ='Cancelled' where leave_record_id=:leave_record_id";
+    $update_parameters = array('leave_record_id'=>$claim_id);
+    $hdb->query($update_sql,$update_parameters);
+
+  }
+
+
+
+  echo claim_item($claim_id,'Rejected',$id,$fullname);
+
+  $response=array('success'=>true,'comment'=>$claim_comment,'claim_id'=>$claim_id,'result'=>$result);
+
+  $_SESSION['reject'] ='reject_success';
+
+  echo json_encode($response);
+
+
+
+}
+
+if(isset($_POST['action']) && $_POST['action'] == 'get_claim_record'){
+
+  $claim_id = $_POST['claim_id'];
+
+  $sql = "select * from leave_table where reference_id=:reference_id";
+
+  $parameters=array('reference_id'=>$claim_id);
+
+  $result = $hdb->query($sql,$parameters);
+
+  $reject_note=$result[0]['reject_note'];
+  $leave_reason=$result[0]['comment'];
+  $regular_day_off=$result[0]['regular_day_off'];
+
+  $response=array('success'=>true,'comment'=>$reject_note,'leave_reason'=>$leave_reason,'claim_id'=>$claim_id,'regular_day_off'=>$regular_day_off);
+
+  echo json_encode($response);
+}
+
+
+
+if(isset($_POST['action']) && $_POST['action'] == 'approve'){
+
+  $claim_id = $_POST['claim_id'];
+  $fullname = $_POST['fullname'];
+  $approve_comment  = $_POST['approve_comment'];
+  $id = $_POST['id'];
+  $email =$_POST['email'];
+  $action= 'Approved';
+
+
+  $result=send_email($claim_id,$action,$email);
+
+  $sql="Update leave_table set status='Approved', approve_note=:approve_note where reference_id=:reference_id";
+
+  $parameters=array('reference_id'=>$claim_id,'approve_note'=> $approve_comment );
+
+  $hdb->query($sql,$parameters);
+
+
+  $leave_detail_sql = "select * from leave_detail where leave_record_id=:leave_record_id";
+  $leave_detail_sql_parameters = array('leave_record_id'=>$claim_id);
+  $result=$hdb->query($leave_detail_sql,$leave_detail_sql_parameters);
+
+  if(count ($result) >0){
+    $update_sql = "Update leave_detail set status ='Approved' where leave_record_id=:leave_record_id";
+    $update_parameters = array('leave_record_id'=>$claim_id);
+    $hdb->query($update_sql,$update_parameters);
+
+  }
+
+
+  echo claim_item($claim_id,'Approved',$id,$fullname);
+
+  $response=array('success'=>true,'claim_id'=>$claim_id,'result'=>$result);
+
+
+  $_SESSION['approve'] = 'approve_success';
+
+  echo json_encode($response);
+
+}
+
+if(isset($_POST['action']) && $_POST['action'] == 'confirm'){
+
+  $claim_id = $_POST['claim_id'];
+  $fullname = $_POST['fullname'];
+  $id = $_POST['id'];
+  $email =$_POST['email'];
+  $startdate  = $_POST['startdate'];
+  $enddate = $_POST['enddate'];
+  $userid = $_POST['userid'];
+  $type_of_leave = $_POST['typeleave'];
+  $create_date = date("Y-m-d H:i:s");
+  $balanceday = $_POST['balanceday'];
+
+
+  $sql = "select date from public_holidays where is_delete ='N'";
+  $result = $hdb->query($sql);
+  $excludedDateArray = array();
+  foreach($result as $row){
+    $excludedDateArray[]=$row['date'];
+  }
+
+  $default_off_day_sql = "select default_off_day from user where id=$userid";
+  $result = $hdb->query($default_off_day_sql);
+  $default_off_day=$result[0]['default_off_day'];
+  $default_off_day_array = explode(',', $default_off_day);
+
+  $dayToNumber = [
+    "Monday" => 1,
+    "Tuesday" => 2,
+    "Wednesday"=>3,
+    "Thursday"=>4,
+    "Friday"=>5,
+    "Saturday"=>6,
+    "Sunday"=>7
+  ];
+  $numbers_day_off = array();
+
+  foreach ($default_off_day_array as $day) {
+    // Check if the day exists in the mapping, and if so, add its corresponding number to the result array
+    if (array_key_exists($day, $dayToNumber)) {
+      $numbers_day_off[] = $dayToNumber[$day];
+    }
+  }
+
+
+  $result=send_email($claim_id,'Confirmed',$email);
+
+  $sql="Update leave_table set status='Confirmed',balance_day_until_end_date=:balance_day_until_end_date where reference_id=:reference_id";
+
+  $parameters=array('reference_id'=>$claim_id,'balance_day_until_end_date'=>$balanceday);
+
+  $hdb->query($sql,$parameters);
+
+
+  $leave_detail_sql = "select * from leave_detail where leave_record_id=:leave_record_id";
+  $leave_detail_sql_parameters = array('leave_record_id'=>$claim_id);
+  $result=$hdb->query($leave_detail_sql,$leave_detail_sql_parameters);
+
+  if(count ($result) >0){
+    $update_sql = "Update leave_detail set status ='Confirmed' where leave_record_id=:leave_record_id";
+    $update_parameters = array('leave_record_id'=>$claim_id);
+    $hdb->query($update_sql,$update_parameters);
+
+  }/*else {
+    $start_timestamp =strtotime($startdate);
+    $end_timestamp = strtotime($enddate);
+    $number_of_day = 1;
+    $current_timestamp = $start_timestamp;
+
+    while ($current_timestamp <= $end_timestamp){
+      $leave_date = date('Y-m-d',$current_timestamp);
+      $dayOfWeek = date('N' ,$current_timestamp);
+
+
+
+      if(!in_array($leave_date,$excludedDateArray) && !in_array($dayOfWeek,$numbers_day_off)){
+        $insert_sql = "Insert into leave_detail set leave_date=:leave_date, leave_start_date=:leave_start_date, leave_end_date=:leave_end_date,created_at=:create_date
+        ,user_id=:user_id,leave_record_id=:claim_id,created_by=:created_by,number_of_day=:number_of_day,type_of_leave=:type_of_leave";
+
+        $insert_parameters=array('leave_date'=>$leave_date,'leave_start_date'=>$startdate,'leave_end_date'=>$enddate,'create_date'=>$create_date,'user_id'=>$userid
+        ,'claim_id'=>$claim_id,'created_by'=>$id,'number_of_day'=>$number_of_day,'type_of_leave'=>$type_of_leave );
+
+        $hdb->query($insert_sql,$insert_parameters);
+      }
+
+      $current_timestamp = strtotime('+1 day', $current_timestamp);
+
+    }
+  }*/
+
+
+  echo claim_item($claim_id,'Confirmed',$id,$fullname);
+
+  $response=array('success'=>true,'claim_id'=>$claim_id,'result'=>$result);
+
+
+  $_SESSION['confirm']='confirm_success';
+
+
+  echo json_encode($response);
+
+}
+
+
+
+
+
+
+if(isset($_POST['action']) && $_POST['action'] == 'cancel_form'){
+
+  $date = date('Y-m-d H:i:s');
+  $cancel_comment = $_POST['cancel_comment'];
+  $claim_id = $_POST['claim_id'];
+  $fullname=$_POST['fullname'];
+  $id=$_POST['id'];
+  $action="cancel";
+  $email=$_POST['email'];
+
+
+  $result=send_email($claim_id,$action,$email,$cancel_comment);
+  //$id =$_SESSION['login_account']['id'];
+
+  $sql="Update leave_table set is_cancel='Y',status='Cancelled',cancel_note=:cancel_comment,cancel_at=:date,cancel_by=:cancel_by,cancel_by_name=:cancel_by_name where reference_id=:reference_id";
+
+  $parameters=array('reference_id'=>$claim_id,'date'=>$date,'cancel_comment'=>$cancel_comment,'cancel_by'=>$id,'cancel_by_name'=>$fullname);
+
+  $hdb->query($sql,$parameters);
+
+
+  $update_leave_detail_sql="Update leave_detail set status='Cancelled' where leave_record_id=:leave_record_id";
+
+  $update_parameters=array('leave_record_id'=>$claim_id);
+
+  $hdb->query($update_leave_detail_sql,$update_parameters);
+
+  echo claim_item($claim_id,'Cancelled',$id,$fullname);
+
+  $response=array('success'=>true,'claim_id'=>$claim_id,'firstname'=>$fullname,'id'=>$id);
+
+  $_SESSION['cancel'] ='cancel_success';
+
+  echo json_encode($response);
+
+
+
+}
+
+
+$date = date('Y-m-d H:i:s');
+
+if(isset($_POST['action']) && $_POST['action'] == 'delete'){
+
+  $id = $_POST['id'];
+
+  $sql="Update user set is_delete='Y',deleted_at=:date where id=:id";
+
+
+  $parameters= array('id'=> $id,'date'=>$date);
+
+  $hdb->query($sql,$parameters);
+
+  $response=array('success'=>true,'id'=>$id);
+
+  echo json_encode($response);
+
+}
+
+
+if(isset($_POST['action']) && $_POST['action'] == 'export'){
+
+  $export_start_date=$_POST['export_start_date'];
+  $export_end_date=$_POST['export_end_date'];
+  $companyid =$_POST['companyid'];
+  $currentDateTime = date('Y-m-d H:i:s');
+  //$sql ="Update leave_detail set is_exported ='Y' where leave_date between '$export_start_date' AND '$export_end_date' ";
+  $select_sql = "Select * from leave_detail as ld
+  inner join user as u on ld.user_id = u.id
+  inner join company as c on u.company = c.id
+  where ld.leave_date between '$export_start_date' AND '$export_end_date'
+  AND ld.is_exported ='N'
+  AND (FIND_IN_SET($companyid, u.company) > 0 OR FIND_IN_SET($companyid, c.id) > 0)";
+
+  $selected_data = $hdb->query($select_sql);
+
+  $update_sql = "Update leave_detail AS ld
+  INNER JOIN user AS u ON ld.user_id = u.id
+  INNER JOIN company AS c ON u.company = c.id
+  SET ld.is_exported ='Y', ld.exported_at =:exported_at,ld.export_period_end=:export_period_end,export_period_start=:export_period_start
+  where ld.leave_date BETWEEN '$export_start_date' AND '$export_end_date' AND is_exported = 'N'
+  AND (FIND_IN_SET($companyid, company) > 0 OR FIND_IN_SET($companyid, u.company) > 0) ";
+
+  $parameters = array('exported_at'=>$currentDateTime,'export_period_end'=>$export_end_date,'export_period_start'=>$export_start_date);
+  $hdb->query($update_sql,$parameters);
+
+  $response=array('success'=>true,'export_start_date'=>$export_start_date, 'export_end_date' => $export_end_date,'companyid'=>$companyid);
+
+  echo json_encode($response);
+
+
+}
+
+
+
+
+
+exit;

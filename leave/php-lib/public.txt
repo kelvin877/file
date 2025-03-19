@@ -1,0 +1,1505 @@
+<?
+/* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
+	Objective   : functions for all web site development
+   - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -  */
+
+// ---------------------------------------------------------------------------
+
+	
+	function	dump( $msg = "" ) {
+		global $debug, $disableDump ; // local page debug
+		if( $disableDump ) return ;
+		// ISDEBUG  whole site debug
+		 if( defined( "ISDEBUG" ) && ISDEBUG || $debug ) print "\n\n<!-- \n        //Debug Info:: $msg -->\n\n" ;
+	}
+	
+	/*function formVar($sVarName, $sVarKey = NULL) {
+		$sVarVal = $GLOBALS["_" . strToUpper(getEnv("REQUEST_METHOD")) ][$sVarName];
+		if (is_array($sVarVal) && $sVarKey !== NULL) {
+			$sVarVal = $sVarVal[$sVarKey];
+		}
+		return $sVarVal;
+	}	*/
+// -----------------------------------------------------------
+	function	embed( $id =0 ){ 
+		if( ! $id ) return "" ;
+		
+		$begin = substr( md5( uniqid( srand( time() ) ) ), 0, 7 ) ;
+		$end = substr( md5( uniqid( srand( time() ) ) ), 0, 8 ) ;
+		
+		return $begin . $id . $end ;
+	}
+	
+	function	dembed( $encryptId ){
+		$sTrimLeft = substr( $encryptId, 7, strlen( $encryptId ) - 7 ) ; // remove $begin = substr( md5( uniqid( srand( time() ) ) ), 0, 7 ) ;
+		$sid = substr( $sTrimLeft, 0, strlen( $sTrimLeft ) - 8 ) ; // remove $end = substr( md5( uniqid( srand( time() ) ) ), 0, 8 ) ;
+		
+		return ( intval( $sid ) > 0 ) ? intval( $sid ) : 0;
+	} 
+
+
+// ---------------------------------------------------------------------------
+	function	deTrim( $string = "" ){
+		$string = ereg_replace( "&#34;", '"', $string );
+		$string = ereg_replace( "&#39;", "'", $string );
+		return $string;
+	}
+
+
+// -- for mailOrder()@core.php ---
+// ---------------------------------------------------------------------------
+	function format_text(  $value = "", $var = "", $width=30, $split = " ", $end = "\n" ) {
+		  $m = $value;
+		  $diff = $width - strlen($value);
+		  for ($i=0;$i<$diff;$i++) {
+			  $m .= $split;
+		  }
+		  return( $m ) ? $m . $var . $end : "" ;
+	 }
+
+
+// ---------------------------------------------------------------------------
+	function	PHP_SELF_PATH(){
+		$PHP_SELF = getEnv( "SCRIPT_NAME" );
+		$sCurPath = substr( $PHP_SELF, 0, ( strlen( $PHP_SELF ) - strlen( basename( $PHP_SELF ) ) ) );
+		return strlen( $sCurPath ) ? $sCurPath : "" ;
+	}
+
+
+// ---------------------------------------------------------------------------
+	function	isExists( $table = "", $field = "", $value = "" ){
+		global	$hdb;
+	//	if( !$hdb ) $hdb = new ODB;
+		$hdb = ODB::instance();
+		$errProgram = "isExists( $table , $field , $value  ) @ " . PHP_SELF;
+		$hdb->setErrProgram( $errProgram );
+		$sql = " select * from $table where $field = \"$value\" limit 1" ;
+		dump( $errProgram . ":: " . $sql );
+		$l = $hdb->rs( $sql );
+		
+		return $l[ "id" ] ;
+	}
+
+	function submit( $var ){
+		global	$_POST, $_GET, $_REQUEST ;
+		if (isset($_REQUEST[$var]) && strlen(trim($_REQUEST[ $var ]))){
+			return trim($_REQUEST[$var]);
+		}
+		//return ( strlen(trim($_POST[ $var ])) ) ? trim( $_POST[ $var ] ) : trim( $_GET[ $var ] );
+	}
+
+// --------- add on: Dec 08, 2000 when developed Naturesbest.ca ---------	
+	function	ImageRotator( $sImgName = "",  $nBegin = 1, $nEnd = 1, $sImgExt = "gif" ){
+		global	$DOCUMENT_ROOT , $PHP_SELF ;
+
+		$sImgName = trim( $sImgName ) ;
+		if( ! strlen( $sImgName  ) ) return false ;
+		$sCurPath = substr( $PHP_SELF, 0, ( strlen( $PHP_SELF ) - strlen( basename( $PHP_SELF ) ) ) );
+
+		mt_srand( ( double ) microtime() * 1000000 );
+		$number=mt_rand( $nBegin, $nEnd );
+		$sActpath = ( substr( $sImgName, 0, 1 ) == "/" ) ? "" : $sCurPath ;
+		$sImgName =  $sCurPath .  $sImgName . $number . "." . $sImgExt ;
+		
+		if( _DEBUG_ ) print "<!-- $sImgName -->" ;
+		if( file_exists(  $DOCUMENT_ROOT . $sImgName ) ) :
+			print "<img src='$sImgName' border=0 alt='' >" ;
+			return true;
+		endif;
+		
+		return false;
+	} 
+	
+
+// add on : Oct 5, 2001
+	function	LoopRows( $sql = "", $LoopCall = "", $HeaderCall = "", $FooterCall = "" ){
+		global	$hdb, $PHP_SELF;
+		
+		if( !$sql  && !$subcall ) return 0;
+		
+		$total = 0 ;
+	//	$hdb = new ODB;
+		$hdb = ODB::instance();
+		$errProgram = "LoopRows( sql, $subcall )@$PHP_SELF" ;
+		$hdb->setErrProgram( $errProgram );
+		dump( $errProgram . " :: " . $sql );
+		
+		$r = $hdb->execSQL( $sql ) ;
+		if( $r ):
+			if( $HeaderCall ) $HeaderCall();
+			while( $l = mysqli_fetch_array( $r ) ):
+				if( $LoopCall( $l, $total ) ) $total ++;
+			endwhile;
+			if( $FooterCall ) $FooterCall( $total );
+		endif;
+		
+		return $total;
+	}		
+
+	
+			
+function isValidEmail($myEmail)
+{
+	if (filter_var(trim($myEmail), FILTER_VALIDATE_EMAIL)) {
+		return true;
+	}else{
+		return false;
+	}
+  //$regEx->Pattern="^[a-zA-Z][\\w\\.-]*[a-zA-Z0-9]@[a-zA-Z0-9][\\w\\.-]*[a-zA-Z0-9]\\.[a-zA-Z][a-zA-Z\\.]*[a-zA-Z]$";
+} 
+
+
+
+
+
+function selected( $var, $val ){
+	echo ( $var == $val ) ? "selected" : "";
+}
+
+
+
+function checked( $var, $val ){
+	echo ( $var == $val ) ? "checked" : "";
+}
+
+		
+function	fetchArray( $sql = "", $params=array()  ){	
+	$result = array();
+
+	$hdb = getConnection();   // in php-lib/DatabaseClass.php
+	$result = $hdb->query($sql, $params);
+	
+	/*$errProgram = "fetchArray($sql) @ $PHP_SELF" ;
+	$hdb->setErrProgram( $errProgram );
+	dump( "$errProgram :: $sql" );
+	
+	
+	$r = $hdb->execSQL( $sql , $params   , $params_type, $fields_type_i );	
+	
+	if ($r){
+		if (!($res = $r->get_result() )) {
+		}else{
+			$n = $res->num_rows;
+			while($l = $res->fetch_array(MYSQLI_ASSOC )){
+				$result[] = $l;
+			}
+		}
+	}*/
+	return $result;
+	//var_dump( $result );
+}
+
+
+/* $sql is a SQL string
+			e.g. select * from product where id = ? and active=?
+			
+			$params is an optional.  However, the order of the params_array must be in order.  e.g. $params= array("id"=> $id , "active" => 'Y')
+			
+			$params_type is also optional fields - A string that contains one or more characters which specify the types for the corresponding bind variables
+			if $params_type is not defined, the types of the corresponding bind variables will be all STRING
+			
+			i	corresponding variable has type integer
+			d	corresponding variable has type double			
+			s	corresponding variable has type string
+			e.g. $params_type = 'is'
+			
+			$fields_type_i is an array which only contain which variable is integer type
+			e.g. $fields_type_i = array('id');			
+			*/
+			
+/*			
+function	fetchArray( $sql = "", $params=array(),$params_type='', $fields_type_i=array()  ){
+	global	$PHP_SELF;
+	$result = array();
+
+	$hdb = ODB::instance();   // ODB in php-lib/lib/db.core.php
+	$errProgram = "fetchArray($sql) @ $PHP_SELF" ;
+	$hdb->setErrProgram( $errProgram );
+	dump( "$errProgram :: $sql" );
+	
+	
+	$r = $hdb->execSQL( $sql , $params   , $params_type, $fields_type_i );	
+	
+	if ($r){
+		if (!($res = $r->get_result() )) {
+		}else{
+			$n = $res->num_rows;
+			while($l = $res->fetch_array(MYSQLI_ASSOC )){
+				$result[] = $l;
+			}
+		}
+	}
+	return $result;
+	//var_dump( $result );
+}
+*/
+	function	getSelection( $table, $field, $selValue, $where = "", $orderby = "" ){
+		global	$PHP_SELF;
+		
+		$total = 0;
+		//$hdb = new ODB;
+		$hdb = ODB::instance();
+		$errProgram = " getSelection( $table, $field, $orderby, $debug ) @ $PHP_SELF" ;
+		$hdb->setErrProgram( $errProgram );
+		$where = $where ? " where $where " : "" ;
+		$orderby = $orderby ? " order by $orderby " : " order by id " ;
+		$sql = " select * from $table $where $orderby " ;
+		dump( "$errProgram :: $sql" );
+
+		$r = $hdb->execSQL( $sql );
+		
+		if (!($res = $r->get_result() )) {
+		}else{
+			$n = $res->num_rows;
+			while($l = $res->fetch_array(MYSQLI_ASSOC )){
+				if( $l[ $field ] ) {
+					$selected = ( $l[ 'id' ] == $selValue ) ? " selected " : "" ;
+					print "<option value='" . $l[ "id" ] . "' $selected >" . trim( $l[ $field ] ). "</option>\n" ;
+					$total ++;
+				}
+			}
+		}
+	/*	if( $r ) :
+			while( $l = mysqli_fetch_array( $r ) ):
+				if( $l[ $field ] ) {
+					$selected = ( $l[ 'id' ] == $selValue ) ? " selected " : "" ;
+					print "<option value='" . $l[ "id" ] . "' $selected >" . trim( $l[ $field ] ). "</option>\n" ;
+					$total ++;
+				}
+			endwhile;
+		endif;*/
+		
+		return $total;
+	}
+	
+#########################
+#	function getRandomRow()
+#	para: $select using "select id as cid, lower(name) as lname" , etc..
+function getRandomRow( $table, $select, $where="", $groupby="", $orderby = "" ){
+	global	$hdb, $PHP_SELF;
+		
+//	if( !$hdb) $hdb = new ODB;
+	$hdb = ODB::instance();
+	$errProgram = "getRandomRow() @" . $PHP_SELF;
+	$hdb->setErrProgram( $errProgram );
+	$sql = "select round( rand() * ( count( * ) - 1 ) ) as randNum from $table " . $where . $groupby .$orderby;
+	dump( "$errProgram :: $sql " );
+	$l = $hdb->rs( $sql );
+
+	$start = ( $l[ 'randNum' ] ) ? $l[ 'randNum' ] : 0;
+	
+	$s = $select . " from $table " . $where . $groupby . $orderby . " limit $start, 1" ;
+	if( $debug ) echo "$errProgram :: $s <br><br>";
+	$l = $hdb->rs( $s );
+	return ( $l ) ? $l : 0;
+}
+
+
+
+function	maxID( $table, $where = "" ){
+	global	$hdb, $PHP_SELF;
+	//if( !$hdb ) $hdb = new ODB();
+	$hdb = ODB::instance();
+	$hdb->setErrProgram( "maxID( $table, $where ) @ " . $PHP_SELF );
+	$l = $hdb->rs( "select max(id) as maxid from $table " . $where );
+	return ( $l[ 'maxid' ] ) ? $l[ 'maxid' ] : 0;
+}
+
+
+
+function	maxRows( $table, $sql = "" ){
+	global	$hdb, $PHP_SELF;
+	//if( !$hdb ) $hdb = new ODB();
+	$hdb = ODB::instance();
+	$hdb->setErrProgram( "maxRows( $table, $sql ) @ " . $PHP_SELF );
+	$l = $hdb->rs( " select count( * ) as maxrow from " . $table . $sql );
+	return ( $l[ 'maxrow' ] ) ?  $l[ 'maxrow' ] : 0;
+}
+
+
+	function	aGetMaxPage( $table, $where, $DisplayRows ){
+		global	$hdb, $PHP_SELF ;
+		
+		$hdb = ODB::instance();
+		if( !$DisplayRows ) $DisplayRows = 20 ;
+		$errProgram = " aGetMaxPage( $sql, $DisplayRows ) @ $PHP_SELF ";
+		$sql = " select count( * ) as rowstotal from $table $where " ;
+		dump( "$errProgram :: $sql " );
+        $l = $hdb->rs(	$sql );
+		$rowstotal = $l[ 'rowstotal' ];
+		$RowsPerPage = $rowstotal / $DisplayRows ;
+		$maxPage = ( ( $RowsPerPage ) > floor( $RowsPerPage ) ) ? floor( $RowsPerPage ) + 1 : ( $RowsPerPage );
+		if( ! $maxPage ) $maxPage = 1;
+		$maxRow = $rowstotal;
+		
+		$aRet = array( "maxPage" => $maxPage, "maxRow" => $maxRow );
+
+		return $aRet ;
+	}
+
+
+//-----------------------------------------------------------
+// for P2P()@public.php, for confirm delete action
+	function	displayJavascriptForDelete($handlerURL, $extraLink = "" , $pageno = ''){	
+?>
+<script language="JavaScript">
+<!-- 
+	function deleteItem(id) {
+		if (confirm("Are you sure you want to delete this item?" ))
+			location.href = "<?php echo $handlerURL ?>?action=delete&id=" + id + "<?php print '&pageno='.$pageno. $extraLink . "&" .  time() ?>";
+	}
+//-->
+</script>
+<?
+	}
+
+function	displayJavascriptForUpdateStatus($link , $extraLink = "", $pageno = '' ){	
+?>
+<script language="JavaScript">
+<!-- 
+	function changeStatus(id) {
+		location.href = "<?= $link ?>?action=updatestatus&id=" + id + "<?php  print '&pageno='.$pageno. $extraLink . "&" .  time() ?>";
+		}
+//-->
+</script>
+<?
+	}
+function	displayJavascriptForUpdateFeaturedProduct($link , $extraLink = "" , $pageno =''){?>
+<script language="JavaScript">
+<!-- 
+	function changeFeaturedProduct(id) {
+		location.href = "<?= $link ?>?action=updateFeaturedProduct&id=" + id + "<?php  print '&pageno='.$pageno. $extraLink . "&" .  time() ?>";
+		}
+//-->
+</script>
+<?
+	}
+	
+/*
+	RecordLister : 2014-10-22
+*/
+
+function	RecordLister( $DisplayRows, $aSQL, $aTitle, $aOrderby, $aCss, $aLink,  $extraCondition, $handlerURL='')
+                       // $aBlankGif, $aFrColor, $aBgColor, $aAlign, $aFontColor, $aFontSize, $aFontFace, $aTitleGifWidth, $aFontClass = "" )
+{						
+		global	$hdb, $pageno,$order, $orderby, $keepindex,  $debug;
+		//global	$DisplayRows, $aSQL, $aTitle, $aOrderby, $aLink,  $extraCondition ;
+		//global	$aBlankGif, $aFrColor, $aBgColor, $aFontSize, $aFontFace;
+		
+		$maxPage = '';
+		$index = $order == 'asc' ? 'asc' : 'desc';		
+		$PHP_SELF = getEnv("SCRIPT_NAME");
+		//if( ! $hdb ) $hdb = new ODB();
+		$hdb = ODB::instance();
+		$errProgram = "RecordLister() @ " . $PHP_SELF ;
+		$hdb->setErrProgram( $errProgram );
+		
+		//echo 'keepindex = '.$keepindex.'<br>';
+	//	if( $index && $keepindex !="yes" ) 	$index = ( $index == "asc" ) ? "desc" : "asc" ;					
+		
+	    if( ! $maxPage ){
+			$sql = "select count(*) as rowstotal from " . $aSQL['table']  . $aSQL['where'] . $aSQL[ 'groupby' ] ;
+			if( $debug ) echo "$errProgram :: $sql <br><br>";
+	        $l = $hdb->rs(	$sql );
+			$rowstotal = $l[ 'rowstotal' ];
+			$RowsPerPage = $rowstotal / $DisplayRows ;
+			$maxPage = ( ( $RowsPerPage ) > floor( $RowsPerPage ) ) ? floor( $RowsPerPage ) + 1 : ( $RowsPerPage );
+			if( ! $maxPage ) $maxPage = 1;
+			$maxRow = $rowstotal;
+		}
+		
+		
+		$strOrder = ( $orderby ) ? "&orderby=$orderby" : ""; 
+		$strIndex = ( $strOrder ) ? "&order=$index" : "";
+		//$strKeepIndex = ( $keepindex ) ? "&keepindex=yes" : "";		
+		$strKeepIndex = "";		
+		$strExtraCondition = ( $extraCondition ) ? $extraCondition : "";
+		$extraLink = $strOrder . $strIndex . $strKeepIndex . $strExtraCondition ;
+		$prePage = ( $pageno > 1 ) ? $pageno - 1 : 1;
+		$pageno = ( $pageno <= 1 ) ? 1 : $pageno;
+		$pageno = ( $pageno >= $maxPage ) ? $maxPage : $pageno;
+		$NextPageno = ( $maxPage <= $pageno + 1 ) ? $maxPage : $pageno + 1 ;
+
+		
+		$strPageno = "&pageno=$pageno&order=$index";
+		
+		print "\n<nav>\n";
+		RecordListerNavigation($pageno, $PHP_SELF, $extraLink, $maxPage, $prePage, $NextPageno, $maxRow);
+		print " <div class='clear'></div>\n
+				</nav>\n";
+	
+		// - - -  - begin table title - - - - - -  
+		echo "\n<ul class=\"listWrap unstyle\">
+			<li class=\"list-head\">\n";		
+		// - - -  - end table title - - - - - - 
+
+		// - - - - begin column header - - - - - 		    
+		for( $i = 0; $i <= count( $aTitle )-1; $i++ ) :
+			print "    <div ";
+			if( isset($aCss[ $i ] ) && $aCss[ $i ] ){
+				echo "class='".$aCss[$i]."' ";
+			}
+			echo '>';
+			if( isset($aOrderby[ $i ] ) && $aOrderby[ $i ] ){
+				//$strIndex = ( $index ) ? "&order=$index" : "";
+				$strIndex = ( $index == "asc" ) ? "&order=desc" : "&order=asc" ;
+			    $strExtraCondition = ( $extraCondition ) ? $extraCondition : "";
+				 print "<a href='$PHP_SELF?pageno=$pageno&orderby=$aOrderby[$i]" . $strIndex . $strExtraCondition . "'>" ;
+			} 
+			//$aSplit = split( "\|", $aTitle[ $i ][ 'caption' ] );
+			$aSplit = preg_split( "/\|/", $aTitle[ $i ][ 'caption' ] );
+			echo $aSplit[ 0 ];
+			if( isset($aOrderby[ $i ]) && $aOrderby[ $i ] ) print "</a>" ;
+			print "</div>\n";
+		 endfor; 
+		 print "</li>\n";
+		// - - - - end column header - - - - - 	
+	
+	   
+	     $start = ( $pageno - 1 ) * $DisplayRows;
+		 if  ( $aSQL['orderby'] && $index ) {
+			//$ss = ( $index == "desc" ) ? "desc" : "";
+			$ss = '';
+			$aSQL[ 'orderby' ] = $aSQL[ 'orderby' ] . $ss;
+		 } else{
+		 	$aSQL[ "orderby" ] = " order by id desc " ;
+		 }
+		 
+		$sql = $aSQL['select']  .  "  from " . $aSQL['table']  . $aSQL['where']  .  $aSQL['groupby'] . $aSQL['orderby'] . " limit " . $start . "," . $DisplayRows;
+		//echo $sql;
+		dump( "$errProgram :: $sql " );
+		$rs = $hdb->execSQL( $sql );
+		if ( $rs ){
+				$lc = 0; 
+		
+				displayJavascriptForDelete( $handlerURL, $extraLink , $pageno) ; // define @public.php
+				displayJavascriptForUpdateStatus($handlerURL , $extraLink, $pageno  );
+				displayJavascriptForUpdateFeaturedProduct($handlerURL , $extraLink , $pageno );
+				// - - - -  begin recordrow - - - - - - 
+				while ( $l = mysqli_fetch_array( $rs ) ) :
+					$lc++;
+					$td = ( $lc % 2 ) ? "td1" : "td0" ;
+				    print "\n<li class='list-row'  id='recordsArray_". $l['id']."' >\n";
+				    $field = -1;
+					for( $j = 0; $j <= count( $aTitle )-1; $j++ ) {	
+										
+						  //$aSplit = split( "\|", $aTitle[ $j ][ 'caption' ] );
+						  $aSplit = preg_split( "/\|/", $aTitle[ $j ][ 'caption' ] );
+						  if( !isset($aSplit[ 1 ]) || !$aSplit[ 1 ] ) $field ++;
+						  
+						  if (isset($aTitle[$j]['openDiv'])  && $aTitle[$j]['openDiv']== 'Y'){
+							print "    <div ";
+							if( isset($aCss[ $j ] ) && $aCss[ $j ] ){
+								echo " class='".$aCss[$j]."' ";
+							}
+							echo ">";
+						}
+							
+						$field_name =  $aTitle[ $j ][ 'field' ] ;
+							
+						//if( $aLink[ $j ] ) eval(  $aLink[ $j ] ); 						  						 
+						  if( isset( $aLink[ $j ]) && $aLink[ $j ] ) {	
+							  	$sLink = trim($aLink[$j]);
+								/**** for product ***/
+								if (preg_match("/{PRODUCT/", $sLink)) {  // show product main image
+									$item = new Product( $l[0] );
+									$img = $item->getMainImage();
+									if (is_file(IMAGE_DOCUMENT_ROOT.$img))									
+										$echoLink = "echo \"<img src='".IMAGE_URL.$img."'  border='0'>\"; " ;
+									else $echoLink = '';
+									//else $echoLink = "echo \"<img src='".IMAGE_URL.$path.$l[0].".gif'   border='0'>\"; " ;
+									
+								/*}elseif (preg_match("/{{{/", $sLink)) {  // show pics
+									$path = substr($sLink, 4);  
+									if (is_file( IMAGE_DOCUMENT_ROOT . '/'.$path.$l[0].'.jpg'))									
+										$echoLink = "echo \"<img src='".IMAGE_URL.$path.$l[0].".jpg'   border='0'>\"; " ;
+									else $echoLink = "echo \"<img src='".IMAGE_URL.$path.$l[0].".gif'   border='0'>\"; " ;
+								*/
+								}elseif ($aTitle[$j]['field'] == 'detailPage'){
+									$sLink =   $l[$field_name]. "?" . $sLink . $extraLink. $strPageno;
+							  		$echoLink = "echo \"<a href='" . $sLink . "' >\";";
+									
+								//if (!ereg("^javascript:", $sLink)) {
+								}elseif (!preg_match("/^javascript:/", $sLink)) {
+									$sLink = $PHP_SELF . "?" . $sLink . $extraLink. $strPageno;
+							  		//$echoLink = "echo \"<a href='#' onclick=\"" . $sLink . "\" >\";";
+							  		$echoLink = "echo \"<a href='" . $sLink . "' >\";";
+								} else{
+							  		$echoLink = "echo \"<a href='#' onclick='" . $sLink . "' >\";";
+								}
+						  	    eval($echoLink);
+						  }
+							
+							if (isset($aTitle[$j]['img'])){
+								echo "<img src='".$aTitle[$j]['img']."' >";
+							}else {
+							  if( isset($aSplit[ 1 ] ) && $aSplit[ 1 ] ) {						  		  
+									  eval( $aSplit[ 1 ]  );
+								}elseif (isset ($aTitle[ $j ][ 'yes_icon' ])){
+									if ($l[ $field_name ] =='Y' || $l[ $field_name ] =='Yes')
+										echo "<img src='".$aTitle[ $j ][ 'yes_icon' ]."'   border='0'>" ;
+									else echo "<img src='".$aTitle[ $j ][ 'no_icon' ]."'   border='0'>";
+								}elseif (strcasecmp ($aTitle[ $j ][ 'field' ], "show_pics") ==0){
+								
+								} else {									  
+									  print trim( $l[ $field_name ] ); 
+								};
+							}
+							
+						    if( isset($aLink[ $j ] ) && $aLink[ $j ] ) print "</a>";
+							
+							if (isset($aTitle[$j]['closeDiv'])  && $aTitle[$j]['closeDiv']== 'Y')
+								print "</div>\n";
+					}	
+			  		print "</li>\n";
+				endwhile;
+				echo "</ul>";
+				// - - - -  end recordrow - - - - - - 
+
+				// - - - -  begin footer - - - - - - 
+					print "\n<nav>\n";
+					RecordListerNavigation($pageno, $PHP_SELF, $extraLink, $maxPage, $prePage, $NextPageno, $maxRow);
+					print " <div class='clear'></div>\n
+							</nav>\n";
+				// - - - -  end footer - - - - - - 
+
+		}	// end of if( $rs )
+		//print "</table>\n";
+}
+
+function RecordListerNavigation($pageno, $PHP_SELF, $extraLink, $maxPage, $prePage, $NextPageno, $maxRow){
+
+    print "<aside> \n \n";
+				if(  $pageno -1  >= 1 ){ // active the previous page link 
+					echo '<a href="'.$PHP_SELF.'?'.$extraLink.'" title="go to the first page"  alt="go to the first page">&lt; &lt;</a>';
+				    print "        <a href='$PHP_SELF?pageno=$prePage" . $extraLink . "'  title='go to the previous page'   >&lt;</a>\n";
+				}
+				print "Page $pageno of $maxPage. Total rows: $maxRow. " ;
+				if ( $pageno+1 <= $maxPage ) {	// active the next page link 
+				        print "        <a href='$PHP_SELF?pageno=$NextPageno" . $extraLink . "'>&gt;</a>\n";
+						echo '<a href="'.$PHP_SELF.'?'.$extraLink.'&pageno='.$maxPage.'" title="go to the last page" alt="go to the last page">&gt; &gt;</a>';
+				}				
+				print "    </aside>\n";
+}
+
+
+function	p2p( $DisplayRows, $aSQL, $aTitle, $aOrderby, $aLink,  $extraCondition, $aTable,
+                        $aBlankGif, $aFrColor, $aBgColor, $aAlign, $aFontColor, $aFontSize, $aFontFace, $aTitleGifWidth, $aFontClass = "" )
+{
+						
+		global	$hdb, $pageno, $orderby, $index, $keepindex, $PHP_SELF, $maxPage, $debug;
+		//global	$DisplayRows, $aSQL, $aTitle, $aOrderby, $aLink,  $extraCondition, $aTable ;
+		//global	$aBlankGif, $aFrColor, $aBgColor, $aFontSize, $aFontFace;
+		
+	//	$hdb = ODB::instance();
+		$errProgram = "P2P() @ " . $PHP_SELF ;
+		$hdb->setErrProgram( $errProgram );
+		
+		 if( $index && $keepindex !="yes" ) $index = ( $index == "up" ) ? "down" : "up" ;
+	    if( ! $maxPage ){
+			$sql = "select count(*) as rowstotal from " . $aSQL['table']  . $aSQL['where'] . $aSQL[ 'groupby' ] ;
+			if( $debug ) echo "$errProgram :: $sql <br><br>";
+	        $l = $hdb->rs(	$sql );
+			$rowstotal = $l[ 'rowstotal' ];
+			$RowsPerPage = $rowstotal / $DisplayRows ;
+			$maxPage = ( ( $RowsPerPage ) > floor( $RowsPerPage ) ) ? floor( $RowsPerPage ) + 1 : ( $RowsPerPage );
+			if( ! $maxPage ) $maxPage = 1;
+			$maxRow = $rowstotal;
+		}
+	
+		// - - -  - begin table title - - - - - -  
+		print "\n<table  border = '" . $aTable['boder'] . "' cellspacing='" . $aTable['cellspacing'] . "' cellpadding='" . $aTable['cellpadding'] . "' align= '". $aTable['align'] . "'";
+		if ($aTable["width"]) {
+			print ' width="' . $aTable["width"] . '"';
+		}
+		print ">\n";
+		if( $aTable['title'] ):
+			  print "\n<tr>\n" ;
+			  print "      <td colspan='" .  ( count( $aTitle ) ) . "' align='center' bgcolor='" . $aBgColor[ 'title' ] ."'><font";
+			if ($aFontFace["title"]) {
+			  	print " face='" . $aFontFace[ 'title' ] . "'";
+			}
+			if ($aFontSize["title"]) {
+				print " size='" . $aFontSize[ 'title' ] . "'";
+			}
+			if ($aFontColor["title"]) {
+				print " color='" . $aFontColor[ 'title' ] ."'";
+			}
+			if ($aFontClass["title"]) {
+				print " class='" . $aFontClass["title"] . "'";
+			}
+			print ">" . $aTable['title'] . "</font></td>\n";
+			  print "</tr>\n";
+		endif;
+		// - - -  - end table title - - - - - - 
+
+		// - - - - begin column header - - - - - 	
+	    print "\n<tr>\n";
+		for( $i = 0; $i <= count( $aTitle )-1; $i++ ) :
+			print "    <td bgcolor='" . $aBgColor[ 'column' ] . "' align='" . $aAlign[ 'column' ] . "'><font";
+			if (isset($aFontColor["column"]) && $aFontColor["column"]) {
+				print " color='" . $aFontColor[ 'column' ] . "'";
+			}
+			if (isset($aFontSize["column"]) && $aFontSize["column"]) {
+				print " size='" . $aFontSize[ 'column' ] . "'";
+			}
+			if (isset($aFontFace["column"]) && $aFontFace["column"]) {
+				print " face='" . $aFontFace[ 'column' ] . "'";
+			}
+			if (isset($aFontClass["column"]) && $aFontClass["column"]) {
+				print " class='" . $aFontClass["column"] . "'";
+			}
+			print ">";
+			if( isset($aOrderby[ $i ] ) && $aOrderby[ $i ] ){
+				$strIndex = ( $index ) ? "&index=$index" : "&index=up";
+			    $strExtraCondition = ( $extraCondition ) ? $extraCondition : "";
+				 print "<a href='$PHP_SELF?pageno=$pageno&orderby=$aOrderby[$i]" . $strIndex . $strExtraCondition . "'>" ;
+			} 
+			//$aSplit = split( "\|", $aTitle[ $i ][ 'caption' ] );
+			$aSplit = preg_split( "/\|/", $aTitle[ $i ][ 'caption' ] );
+			print $aSplit[ 0 ];
+			if( isset($aOrderby[ $i ]) && $aOrderby[ $i ] ) print "</a>" ;
+			$awidth = ( isset($aTitleGifWidth[ $i ] ) && $aTitleGifWidth[ $i ]  ) ? $aTitleGifWidth[ $i ] : "80" ;
+			print "</font><br><img src='" . $aBlankGif[ 'name' ] . "' width = '" . $awidth. "' height = '1' border='0'></td>\n";
+		 endfor; 
+		 print "</tr>\n";
+		// - - - - end column header - - - - - 	
+	
+	    $prePage = ( $pageno > 1 ) ? $pageno - 1 : 1;
+		$pageno = ( $pageno <= 1 ) ? 1 : $pageno;
+		$pageno = ( $pageno >= $maxPage ) ? $maxPage : $pageno;
+		$NextPageno = ( $maxPage <= $pageno + 1 ) ? $maxPage : $pageno + 1 ;
+
+	     $start = ( $pageno - 1 ) * $DisplayRows;
+		 if  ( $aSQL['orderby'] && $index ) {
+			$ss = ( $index == "down" ) ? "desc" : "";
+			$aSQL[ 'orderby' ] = $aSQL[ 'orderby' ] . $ss;
+		 } else{
+		 	$aSQL[ "orderby" ] = " order by id desc " ;
+		 }
+		 
+		$sql = $aSQL['select']  .  "  from " . $aSQL['table']  . $aSQL['where']  .  $aSQL['groupby'] . $aSQL['orderby'] . " limit " . $start . "," . $DisplayRows;
+		dump( "$errProgram :: $sql " );
+		$rs = $hdb->execSQL( $sql );
+		if ( $rs ){
+				$lc = 0; 
+
+				$strOrder = ( $orderby ) ? "&orderby=$orderby" : ""; 
+				$strIndex = ( $strOrder ) ? "&index=$index" : "";
+				$strKeepIndex = ( $index ) ? "&keepindex=yes" : "";
+			    $strExtraCondition = ( $extraCondition ) ? $extraCondition : "";
+				$extraLink = $strOrder . $strIndex . $strKeepIndex . $strExtraCondition ;
+		
+				displayJavascriptForDelete( $extraLink ) ; // define @public.php
+
+				// - - - -  begin recordrow - - - - - - 
+				while ( $l = mysqli_fetch_array( $rs ) ) :
+					$lc++;
+					$td = ( $lc % 2 ) ? "td1" : "td0" ;
+				    print "\n<tr>\n";
+				    $field = -1;
+					for( $j = 0; $j <= count( $aTitle )-1; $j++ ) {	
+						  //$aSplit = split( "\|", $aTitle[ $j ][ 'caption' ] );
+						  $aSplit = preg_split( "/\|/", $aTitle[ $j ][ 'caption' ] );
+						  if( !isset($aSplit[ 1 ]) || !$aSplit[ 1 ] ) $field ++;
+					      print "    <td bgcolor='" . $aBgColor[ $td ] . "' valign='middle'  align='" . $aAlign[ $td ] . "'><font";
+						if (isset($aFontFace[$td]) && $aFontFace[$td]) {
+						  	print " face='" . $aFontFace[ $td ] . "'";
+						}
+						if (isset($aFontSize[$td]) && $aFontSize[$td]) {
+							print " size='" . $aFontSize[ $td ] . "'";
+						}
+						if (isset($aFontColor[$td]) && $aFontColor[$td]) {
+							print " color='" . $aFontColor[ $td ] . "'";
+						}
+						if (isset($aFontClass[$td]) && $aFontClass[$td]) {
+							print " class='" . $aFontClass[$td] . "'";
+						}
+						print ">";
+						  //if( $aLink[ $j ] ) eval(  $aLink[ $j ] ); 
+						  if( isset( $aLink[ $j ]) && $aLink[ $j ] ) {	
+							  	$sLink = trim($aLink[$j]);
+								//if (!ereg("^javascript:", $sLink)) {
+								if (!preg_match("/^javascript:/", $sLink)) {
+									$sLink = $PHP_SELF . "?" . $sLink . $extraLink;
+							  		//$echoLink = "echo \"<a href='#' onclick=\"" . $sLink . "\" >\";";
+							  		$echoLink = "echo \"<a href='" . $sLink . "' >\";";
+								} else{
+							  		$echoLink = "echo \"<a href='#' onclick='" . $sLink . "' >\";";
+								}
+						  	    eval($echoLink);
+						  }
+
+						  if( isset($aSplit[ 1 ] ) && $aSplit[ 1 ] ) {
+						  		  //print "<!-- " . $aSplit[1] . " -->" ;
+								  eval( $aSplit[ 1 ] );
+							} else {
+								  $field_name =  $aTitle[ $j ][ 'field' ] ;
+								  print trim( $l[ $field_name ] ); 
+							};
+						  
+						    if( isset($aLink[ $j ] ) && $aLink[ $j ] ) print "</a>";
+				    	    print "</font>&nbsp;</td>\n";
+					}	
+			  		print "</tr>\n";
+				endwhile;
+				// - - - -  end recordrow - - - - - - 
+
+				// - - - -  begin footer - - - - - - 
+				print "\n<tr>\n";
+				print "    <td align='right' colspan='" . ( count( $aTitle ) ) . "' bgcolor='" . $aBgColor[ 'footer' ] . "'><font";
+				if (isset($aFontFace["footer"]) && $aFontFace["footer"]) {
+					print " face='" . $aFontFace[ 'footer' ] . "'";
+				}
+				if (isset($aFontSize["footer"]) && $aFontSize["footer"]) {
+					print " size='" . $aFontSize[  'footer'  ] . "'";
+				}
+				if (isset($aFontColor["footer"]) && $aFontColor["footer"]) {
+					print " color='" . $aFontColor[ 'footer' ] . "'";
+				}
+				print ">";
+
+				if(  $pageno -1  >= 1 ){ // active the previous page link 
+				        print "        <a href='$PHP_SELF?pageno=$prePage" . $extraLink . "'> << </a>\n";
+				}
+				print "Page $pageno of $maxPage. Total rows: $maxRow. " ;
+				if ( $pageno+1 <= $maxPage ) {	// active the next page link 
+				        print "        <a href='$PHP_SELF?pageno=$NextPageno" . $extraLink . "'> >> </a>\n";
+				}
+				print "    </font></td>\n";
+		  		print "</tr>\n";
+				// - - - -  end footer - - - - - - 
+
+		}	// end of if( $rs )
+		print "</table>\n";
+}
+// - - - - - - -  End of P2P2002 function- - - - - - - - 
+
+
+
+####################################
+####    Begin : Credit Card Validate 	Function       ####
+####	Reference by CreditCard.pm in perl SPAN   ####
+###################################
+function cardType ( $number ){
+//	return "" if not a creditcard
+
+	$tmp = $number;
+    $number = preg_replace( "/[^0-9]/", "", $tmp );
+
+    if ( preg_match(  "/[^\d\s]/", $number ) )  return "";
+    if ( strlen( $number ) < 13 && (0+$number) )  return "Not a credit card";
+    if ( substr($number,0,1) == "4"  ) return "VISA";
+    if ( substr($number,0,1) == "5"  ) return "MasterCard";
+    if ( substr($number,0,1) == "6"  ) return "Discove";
+    if ( substr($number,0,2) == "37") return "AmericanExpress";
+    if ( substr($number,0,1) == "3"  ) return "Diner's Club, Transmedia, or other dining/entertainment card" ;
+    return "";
+}
+
+
+
+function getLastDigit ( $number ){
+	$tmp = $number;
+    $number = preg_replace( "/[^0-9]/", "", $tmp );
+
+    for ($i = 0; $i < strlen($number); $i++) {
+		$weight = substr($number, -1 * ($i + 1), 1) * (2 - ($i % 2));
+		$sum += (($weight < 10) ? $weight : ($weight - 9));
+    }
+
+    return (10 - $sum % 10) % 10;
+}
+
+
+
+function validate( $number ) {
+    
+	$tmp = $number;
+    $number = preg_replace( "/[^0-9]/", "", $tmp );
+
+    if ( preg_match(  "/[^\d\s]/", $number ) )  return 0;
+    if ( strlen($number) < 13  && 0+$number ) return 0; 
+
+    for ($i = 0; $i < strlen($number) - 1; $i++) {
+		$weight = substr($number, -1 * ($i + 2), 1) * (2 - ($i % 2));
+		$sum += (($weight < 10) ? $weight : ($weight - 9));
+    }
+
+    if ( substr($number, -1) == (10 - $sum % 10) % 10  )  return $number;
+    return $number;
+}
+
+
+
+function	trueCard( $name, $number ){
+	return ( validate( $number ) && strtoupper(cardType( $number ) ) == strtoupper( $name ) );
+}
+########## 		End : Credit Card Validate 	Function	################
+
+
+	function	dotXScript(){?>
+	<script language="JavaScript" >
+		<!--
+		function round2digit( number, X  ) {
+		    return Math.round( number * Math.pow( 10, X ) ) / Math.pow( 10,X );
+		}
+
+		function dotX( num, X ){
+			if ( num ){
+				zero = "00000000000000000000";
+				num = round2digit( num, X );
+				a = num.toString();
+				s = a.split( ".", 2 );
+				if ( s.length > 1 ){
+				    s[ 1 ] = s[ 1 ] + zero;
+					a = s[ 0 ] + "." + s[ 1 ].substr( 0, X );
+				} else{
+					a = s[ 0 ] + "." + zero.substr( 0, X );
+				}
+				return a;
+			}		
+			return "";
+		}
+		//->
+ 	</script>
+
+<?}
+
+
+	function	setFields( $vars ){
+
+		$tmp = removeAllChar( $vars, 32 );
+		$fields = split( ",", $tmp );
+
+		$len = sizeof( $fields );
+		$setfields = "";
+		for( $i = 0; $i < $len; $i ++ ){
+			$str = "global $" . $fields[ $i ] . ";" ;
+			eval( $str );
+			eval( "\$val = \$" . $fields[ $i ] . ";"  );
+			$setfields .=  $fields[ $i ] . " = '" . $val . "', " ;
+		}
+		
+		return ( $setfields ) ? substr( $setfields, 0, strlen( $setfields ) - 2 ) : "" ;
+	}
+
+
+	function	fieldsEmpty( $vars ){
+
+		$tmp = removeAllChar( $vars, 32 );
+		$fields = split( ",", $tmp );
+
+		$len = sizeof( $fields );
+		$setfields = "";
+		for( $i = 0; $i < $len; $i ++ ){
+			$str = "global $" . $fields[ $i ] . ";" ;
+			eval( $str );
+			eval( "\$val = \$" . $fields[ $i ] . ";"  );
+			if( empty( $val ) ) $setfields .= $fields[ $i ] . "," ;
+		}
+		
+		return ( $setfields ) ? substr( $setfields, 0, strlen( $setfields ) - 1 ) : "" ;
+	}
+
+
+
+	function removeAllChar( $s, $ascii ){ 
+		$tmp = "";
+		for( $i = 0; $i < strlen($s); $i++ ){
+			if ( $s[ $i ] != chr($ascii) ) $tmp .= $s[ $i ];
+		}
+		return $tmp;
+	}
+
+
+
+	function replaceAllChar( $s, $char, $replace ){ 
+		$tmp = "";
+		for( $i = 0; $i < strlen($s); $i++ ){
+			if ( $s[ $i ] != $char ) {
+				$tmp .= $s[ $i ];
+			} else {
+				$tmp .= $replace;
+			}
+		}
+		return $tmp;
+	}
+
+	function	fullName( $firstname, $lastname ){
+		return ucfirst( strtolower( $firstname ) ) . " " . ucfirst( strtolower( $lastname ) );
+	}
+
+	function	getCondition( $field, $value="", $logic = " and " ){
+	// use for keyword search. split the key words to make a sql request.
+		$condition = "";
+		$value = trim( $value ) ;
+		if( $value ){
+			$pair = split( " " , $value );
+			$and = "";
+			$or = "" ;
+			for( $i = 0; $i < count( $pair ) ; $i++ ){
+				$pair[ $i ] = removeAllChar( $pair[ $i ], 32 ); // remove all the space
+				if( $pair[ $i ] ){
+					$and .= " ($field like '%" . $pair[ $i ] . "%') and ";
+					//$or .= " ( $field like '%" . $pair[ $i ] . "%' ) or " ;
+				}
+			}
+			$and = substr( $and, 0, strlen( $and ) - strlen( "and " ) ); // chop the last "and "
+			$or = substr( $or, 0, strlen( $or ) - strlen( "or " ) ); // chop the last "or "
+			
+			//$condition = " ( ( $and ) or ( $or ) )";
+			//$condition =" (  $or ) " ;
+			$condition =" ( $and ) " ;
+		}
+		return ( $condition ) ? $condition . $logic : "";
+	}
+	
+	// Chop string to specific length and append with specified substring
+	// ------------------------------------------------------------------
+
+	function chopAppend($sIn,$iLength,$sAppend="") {
+		$sOut = "";
+		if (strLen($sIn) > $iLength):
+			$sOut = substr($sIn,0,$iLength);
+			$iSpPos = strRPos($sOut, " ");
+			if ($iSpPos > 0):
+				$sOut = substr($sOut,0,$iSpPos);
+			endif;
+			if (strLen($sOut) > $iLenth):
+				$bDone = false;
+				while (!$bDone):
+					$iOrd = ord(substr($sOut,strLen($sOut)-1,1));
+					if ($iOrd > 126):
+						$sOut = substr($sOut,0,strLen($sOut)-1);
+					else:
+						$bDone = true;
+					endif;
+				endwhile;
+			endif;
+			$sOut .= $sAppend;
+		else:
+			$sOut = $sIn;
+		endif;
+		return ($sOut);
+	}
+
+function	show_day( $beginyear = 2000, $endyear = 2008, $show = "dmy", $select = 0, $language = "en",  $compress= "", $perfix = "" ){
+	if( ! $perfix ):
+		global	$selDay, $selMon, $selYear;	
+		if( ! $select ):
+			if( !$selDay ) $selDay = date( "d" );
+			if( !$selMon ) $selMon = date( "m" );
+			if( !$selYear ) $selYear = date( "Y" );
+		endif;
+	else:
+		eval( "global \$" . $perfix . "Day, \$" . $perfix . "Mon, \$" . $perfix . "Year; " ) ;
+		if( ! $select ):
+			eval( " if( !\$" . $perfix . "Day ) \$" . $perfix . "Day = date( 'd' );" ) ;
+			eval( " if( !\$" . $perfix . "Mon ) \$" . $perfix . "Mon = date( 'm' );" ) ;
+			eval( " if( !\$" . $perfix . "Year ) \$" . $perfix . "Year = date( 'Y' );" ) ;
+		endif;
+	endif;
+
+	if( $compress ):
+			$yearMsg = ( strtolower( $language == "en" ) ) ? "-Y-": "-年-" ;
+			$monMsg = ( strtolower( $language == "en" ) ) ? "-M-": "-月-" ;
+			$dayMsg = ( strtolower( $language == "en" ) ) ? "-D-": "-日-" ;
+	else:
+			$yearMsg = ( strtolower( $language == "en" ) ) ? "- Year -": "- 年 -" ;
+			$monMsg = ( strtolower( $language == "en" ) ) ? "- Month -": "- 月 -" ;
+			$dayMsg = ( strtolower( $language == "en" ) ) ? "- Day -": "- 日 -" ;
+	endif;
+
+	$M 		= 	array(
+	                   "F" => array(  "01" => "January",
+								"02" => "February",
+								"03" => "Mar",
+								"04" => "April",
+								"05" => "May",
+								"06" => "June",
+								"07" => "July",
+								"08" => "August",
+								"09" => "September",
+								"10" => "October",
+								"11" => "Novmber",
+								"12" => "December" ),
+	                  "M" =>  	array( "01" => "Jan",
+								"02" => "Feb",
+								"03" => "Mar",
+								"04" => "Apr",
+								"05" => "May",
+								"06" => "Jun",
+								"07" => "Jul",
+								"08" => "Aug",
+								"09" => "Sep",
+								"10" => "Oct",
+								"11" => "Nov",
+								"12" => "Dec" ),
+	                  "m" =>  	array( "01" => "01",
+								"02" => "02",
+								"03" => "03",
+								"04" => "04",
+								"05" => "05",
+								"06" => "06",
+								"07" => "07",
+								"08" => "08",
+								"09" => "09",
+								"10" => "10",
+								"11" => "11",
+								"12" => "12" )
+					 );
+
+for( $loop = 0; $loop < strlen(trim($show)); $loop ++ ):
+
+	$mformat = substr( $show, $loop, 1 );					 
+
+	if( ereg( "d", strtolower( $show ) ) ):	
+			print ( ! $perfix ) ? "<select name='selDay' size='1'>\n"  :  "<select name='" . $perfix . "Day' size='1'>\n" ;
+			if ( $select ) print "<option value ='' >$dayMsg</option>\n<option value=''></option>\n";	  
+		 	for ( $i = 1; $i <= 31; $i++ ):
+				$d = substr(100+$i, 1, 2 );
+				if( !$perfix ):
+					$selected = ( $selDay == $d ) ? " selected " : "" ;
+				else:
+					eval( "\$selected = ( \$" . $perfix . "Day == \$d ) ? \" selected \" : \"\"  ; " );
+				endif;
+    	        print "<option value='$d' $selected >$d</option>\n" ;
+	     	endfor;
+          	print "</select>\n" ;
+	endif; 
+	
+	if( ereg( "m|M|F", $mformat ) ):
+			print ( ! $perfix ) ? "<select name='selMon' size='1'>\n"  :  "<select name='" . $perfix . "Mon' size='1'>\n" ;
+			if ( $select ) print "<option value ='' >$monMsg</option>\n<option value=''></option>\n";	  
+			for ( $i = 1; $i <= 12; $i++ ):
+				$d = substr(100+$i, 1, 2 );
+				if( !$perfix ):
+					$selected = ( $selMon == $d ) ? " selected " : "" ;
+				else:
+					eval( "\$selected = ( \$" . $perfix . "Mon == \$d ) ? \" selected \" : \"\"  ; " );
+				endif;
+				print "<option value='$d' $selected >" . $M[ $mformat ][ $d] . "</option>\n" ;
+			endfor;
+          	print "</select>\n" ;
+	endif;
+
+	if( ereg( "y", strtolower( $show ) ) ):	
+			print ( ! $perfix ) ? "<select name='selYear' size='1'>\n"  :  "<select name='" . $perfix . "Year' size='1'>\n" ;
+			if ( $select ) echo "<option value ='' >$yearMsg</option>\n<option value=''></option>\n";	  
+			for ( $i = $beginyear; $i <= $endyear; $i++ ):
+				if( !$perfix ):
+					$selected = ( $selYear == $i ) ? " selected " : "" ;
+				else:
+					eval( "\$selected = ( \$" . $perfix . "Year == \$i ) ? \" selected \" : \"\"  ; " );
+				endif;
+            	print "<option value='$i' $selected >$i</option>\n";
+			endfor;
+          	print "</select>\n" ;
+	endif; 
+
+	endfor;	 //strlen($show)
+}
+
+	function	show_select_time( $fmt = "H:M:S", $prefix = "" ){
+		if( $prefix ) {
+			 global	${ $prefix . "hour" }, ${ $prefix . "minute" } , ${ $prefix . "second" };
+		} else {
+			global	$hour, $minute, $second ;
+		};
+		
+		if( ereg( "h", strtolower( $fmt ) ) ):
+			print "<select name='" .( $prefix . "hour" ) . "' >\n" ;
+			for( $i = 0; $i <= 23 ; $i ++ ){
+				$stri = ( $i < 10 ) ? "0" . $i : $i ;
+				$selected = ( $stri == ${ $prefix . "hour" } ) ? "selected" : "" ;
+				print "<option value='$stri' $selected >$stri</option>\n";
+			}
+			print "</select>\n" ;
+		endif;
+
+		
+		if( ereg( "m", strtolower( $fmt ) ) ):
+			print "<select name='" .( $prefix . "minute" ) . "' >\n" ;
+			for( $i = 0; $i <= 59 ; $i ++ ){
+				$stri = ( $i < 10 ) ? "0" . $i : $i ;
+				$selected = ( $stri == ${ $prefix . "minute" } ) ? "selected" : "" ;
+				print "<option value='$stri' $selected >$stri</option>\n";
+			}
+			print "</select>\n" ;
+		endif;
+
+		if( ereg( "s", strtolower( $fmt ) ) ):
+			print "<select name='" .( $prefix . "second" ) . "' >\n" ;
+			for( $i = 0; $i <= 59 ; $i ++ ){
+				$stri = ( $i < 10 ) ? "0" . $i : $i ;
+				$selected = ( $stri == ${ $prefix . "second" } ) ? "selected" : "" ;
+				print "<option value='$stri' $selected >$stri</option>\n";
+			}
+			print "</select>\n" ;
+		endif;
+
+	}
+
+
+	function	upload( $perfix_path, $upload_name, $perfix_name, $mid, $ext = ".gif"  ){
+		
+		if( $upload_name != "none" && $upload_name ){
+			$tofile = $perfix_path. $perfix_name . $mid . $ext;
+			//print "Copy file: $name $tofile" ;
+			if( copy( $upload_name, $tofile ) ) {
+				unlink( $upload_name ); // delete the temporary file.
+			}else {
+				 return "cann't copy file: $tofile." ;
+			}
+		}
+		return "";
+	}
+	
+	function	delete_file( $file ){ // 0: success
+		if ( file_exists( $file ) )  return unlink( $file )  ; 
+		return "error" ;
+	}
+	
+	function	upload_file( $from, $to ){
+		if( $from != "none" && $from ){
+		//print "Copy file: $from, $to";
+			if( copy( $from, $to ) ):
+				unlink( $from );
+				return "";
+			else :
+				 return "cann't copy file: $from $to." ;
+			endif;
+		}
+
+		return "";
+	}
+	
+
+// $strHtml should contain an HTML document.
+// This will remove HTML tags, javascript sections
+// and white space. It will also convert some
+// common HTML entities to their text equivalent.
+	function	escapeHtmlTags( $strHtml = "" ){
+		if( strlen( $strHtml ) ) :
+			$search = array ("'<script[^>]*?>.*?</script>'si",  // Strip out javascript
+			                 "'<[\/\!]*?[^<>]*?>'si",  // Strip out html tags
+			                 "'([\r\n])[\s]+'",  // Strip out white space
+			                 "'&(quot|#34);'i",  // Replace html entities
+			                 "'&(amp|#38);'i",
+			                 "'&(lt|#60);'i",
+			                 "'&(gt|#62);'i",
+			                 "'&(nbsp|#160);'i",
+			                 "'&(iexcl|#161);'i",
+			                 "'&(cent|#162);'i",
+			                 "'&(pound|#163);'i",
+			                 "'&(copy|#169);'i",
+			                 "'&#(\d+);'e");  // evaluate as php
+
+			$replace = array ("",
+			                  "",
+			                  "\\1",
+			                  "\"",
+			                  "&",
+			                  "<",
+			                  ">",
+			                  " ",
+			                  chr(161),
+			                  chr(162),
+			                  chr(163),
+			                  chr(169),
+			                  "chr(\\1)");
+
+			$text =  preg_replace ( $search, $replace, $strHtml );
+			//print "\n\n-----------------------escapeHtmlTags -\n" . $text . "\n---------------------------\n";
+			return $text;
+		endif;
+
+		return "" ;
+	}
+
+
+// Modify htmlSpecialChars() : handle chinese chars
+	function MyHtmlSpecialChars( $str = "" ) {
+		//$nChineseChar = 0;
+		$retStr = "";
+		for( $i = 0; $i < strlen($str); $i ++ ){ 
+			$char = substr( $str, $i, 1 );
+			if( bin2hex($char) > bin2hex(chr(127)) ) {
+				//$nChineseChar ++;
+				$retStr .= substr( $str, $i, 1 );
+				$i++; // skip one char because we need to get the whole chinese char.
+				$retStr .= substr( $str, $i, 1 );
+			} else {
+				$retStr .= htmlSpecialChars( substr( $str, $i, 1 ) );
+			}
+		}
+		return $retStr;
+	}
+
+
+
+function	checkFormPass( $form_mail = "", $language = "English" )
+{
+	//global	$form_mail ;
+	global	$HTTP_POST_VARS ;
+	global	$HTTP_POST_FILES ;
+
+	$bIsBig5  = ( "big5" == strtolower( $language ) );
+	$sErrRequired = $bIsBig5 ? "請填寫: " : "Missing: " ;
+	$sErrMail = $bIsBig5 ? "請輸入一個有效的電郵地址。" : "Please fill in a valid e-mail address." ;
+	$sErrCreditNumber = $bIsBig5 ? "請檢查您的信用卡號碼。" : "Please check the credit card number." ;
+	$sErrExpiry = $bIsBig5 ? "請檢查信用卡有效日期。" : "Please check the credit card expiry date." ;
+	$sErrAttachement = $bIsBig5 ? "請選擇上傳文檔：" : "Please select upload file:" ;
+
+	for( $i = 0; $i < count( $form_mail ); $i ++ ){
+		$value = trim( $HTTP_POST_VARS[ $form_mail[ $i ][ "name" ] ] );
+
+		if( (! strlen($value) )
+		    && ( $form_mail[ $i ][ "required" ] == "Required" )
+		  )   return $sErrRequired . $form_mail[ $i ][ "text" ];
+
+		if( ($form_mail[ $i ][ "required" ] == "E-mail" )
+		    && (! isMail($value) )
+		  )	 return $form_mail[ $i ][ "text" ] . ":" . $sErrMail ;
+		
+		if( ($form_mail[ $i ][ "required" ] == "CreditCard#" )
+			&& !formIsCreditNumber( $value )
+		  ) return $sErrCreditNumber ;
+
+		if( ($form_mail[ $i ][ "required" ] == "CreditCard(MM-YYYY)" )
+			&& ( $value < date("Y-m") )
+		  ) return $sErrExpiry; 
+
+		if( ($form_mail[ $i ][ "required" ] == "Attachment Required" ) 
+			&& ! is_uploaded_file( $HTTP_POST_FILES[ $form_mail[ $i ]["name"] ][ "tmp_name" ] )
+		  ) return  $sErrAttachement . $form_mail[ $i ][ "text" ];
+		
+	}
+	
+	return "" ;
+}
+
+function formIsCreditNumber( $number ) {
+    
+	$tmp = $number;
+    $number = preg_replace( "/[^0-9]/", "", $tmp );
+
+    if ( preg_match(  "/[^\d\s]/", $number ) )  return 0;
+    if ( strlen($number) < 13  && 0+$number ) return 0; 
+
+    for ($i = 0; $i < strlen($number) - 1; $i++) {
+		$weight = substr($number, -1 * ($i + 2), 1) * (2 - ($i % 2));
+		$sum += (($weight < 10) ? $weight : ($weight - 9));
+    }
+
+    if ( substr($number, -1) == (10 - $sum % 10) % 10  )  return $number;
+    return $number;
+}
+
+
+function makeThumbNail( $src, $dst, $thumb_w, $thumb_h ){
+	if( is_file($src) ):
+		$a = @getImageSize($src);
+		$w = $a[ 0 ] ;
+		$h = $a[ 1 ] ;
+		$bIsLandscape = ( $w > $h ) ;
+		$t_w = $bIsLandscape ? $thumb_w : $thumb_h ;
+		$t_h  = $bIsLandscape ? $thumb_h : $thumb_w ;
+		$cmd = sprintf("convert -size %dx%d %s -geometry %dx%d+0+0 %s",  $t_w, $t_h, $src, $t_w, $t_h, $dst); // ImageMagicK Libaray
+		//print $cmd;
+		system($cmd);
+		return is_file($dst) ;
+	endif;
+	return false;
+}
+
+// - - - -- - - - - - - - - - - - - - - - - - - - - - - - - - - 
+function	readFile2Str( $file )
+{
+	$hFile = fopen( $file, "r" );
+	if( $hFile ){
+	  $s = fread( $hFile, filesize( $file ) );
+	  fclose( $hFile );
+	  return $s ;
+	}
+	return "" ;
+}
+// 
+
+function	getExtraLink( $iPageNo = 0 ){ 
+		global $pageno, $maxPage, $maxRow ;
+		global	$category_id ;
+		$pageno = submit("pageno" );
+		$maxPage = submit( "maxPage" );
+		$maxRow = submit( "maxRow" );
+		$category_id = submit( "category_id" );
+		$parent_id = submit( "parent_id" );
+		$sPageNo = ( $iPageNo > 0 ) ? "&pageno=$iPageNo&maxPage=$maxPage&maxRow=$maxRow" : "&pageno=$pageno&maxPage=$maxPage&maxRow=$maxRow" ;
+		$extraLink = $sPageNo . "&category_id=$category_id&parent_id=$parent_id" ;
+		
+		return $extraLink ;
+	}
+	
+function	displayProductThumbnail( &$product ){
+	// echo $product->thumbnail_file;
+		if( is_file($product->thumbnail_file) ) :
+		//	$link = "detail.php?pid=" . $product->id . getExtraLink() ;
+			$link = to_Html_url($product);
+			print "<a href='$link'><img src='" . $product->thumbnail . "' border=0 alt='" . htmlspecialchars($product->name) . "'></a>" ;
+		endif;
+	}
+
+/*
+	function	displayCategory(){
+		$nSep = 10 ;
+		$sProductLink = '/product.php?category_id=%d';
+		$dAccessories = array(
+			'ESC' => array("href" => "javascript:void(0)", "onmouseover" => "popUp('HM_Menu8', event)", "onmouseout" => "popDown('HM_Menu8')"),
+			'Gyro/Governor' => array("href" => "javascript:void(0)", "onmouseover" => "popUp('HM_Menu12', event)", "onmouseout" => "popDown('HM_Menu12')"), // => array("href" => sprintf($sProductLink, 59)),
+			'Servo' => array("href" => "javascript:void(0)", "onmouseover" => "popUp('HM_Menu11', event)", "onmouseout" => "popDown('HM_Menu11')"),
+			'Simulator' => array("href" => sprintf($sProductLink, 70)),
+			'Motors' => array("href" => "javascript:void(0)", "onmouseover" => "popUp('HM_Menu9', event)", "onmouseout" => "popDown('HM_Menu9')"),
+			'Pilots' => array("href" => sprintf($sProductLink, 77)),
+			'Charger' => array("href" => sprintf($sProductLink, 58)),
+			'Battery' => array("href" => "javascript:void(0)", "onmouseover" => "popUp('HM_Menu13', event)", "onmouseout" => "popDown('HM_Menu13')"),
+			'Receiver' => array("href" => sprintf($sProductLink, 87)),
+			'Spinners' => array("href" => sprintf($sProductLink, 105)),
+			'Wheels &amp; Access.' => array("href" => sprintf($sProductLink, 106)),
+		//	'Propellers' => array("href" => sprintf($sProductLink, 54)),
+			'Propellers' => array("href" => "javascript:void(0)", "onmouseover" => "popUp('HM_Menu14', event)", "onmouseout" => "popDown('HM_Menu14')"),
+			'Others' => array("href" => sprintf($sProductLink, 72))
+		);
+?>
+<script language="JavaScript1.2" type="text/javascript" src="/js/<? if( defined( "ISDEBUG" ) && ISDEBUG ) print "debug/"; ?>HM_Loader.js"></script>
+
+<table cellpadding="0" cellspacing="0" border="0" width="100%">
+	<tr>
+		<td align="right" nowrap><font class='pMenuMain'><a href="javascript:void(0)" onclick="return false" onmouseover="popUp('HM_Menu1', event)" onmouseout="popDown('HM_Menu1')">RC Helicopters</a></font></td>
+		<td align="left">&nbsp;<img src='/pics/interface/dot_y.gif' border=0></td>
+	</tr>
+	<tr><td colspan="2"><img src="/pics/blank.gif" border=0 width="1" height="<?= $nSep ?>"></td></tr>
+	<tr>
+		<td align="right" nowrap><font class='pMenuMain'><a href="javascript:void(0)" onclick="return false" onmouseover="popUp('HM_Menu2', event)" onmouseout="popDown('HM_Menu2')">RC Cars</font></td>
+		<td>&nbsp;<img src='/pics/interface/dot_y.gif' border=0></td>
+	</tr>
+	<tr><td colspan="2"><img src="/pics/blank.gif" border=0 width="1" height="<?= $nSep ?>"></td></tr>
+	<tr>
+		<td align="right" nowrap><font class='pMenuMain'><a href="javascript:void(0)" onclick="return false" onmouseover="popUp('HM_Menu3', event)" onmouseout="popDown('HM_Menu3')">Electric RC Planes</a></font></td>
+		<td>&nbsp;<img src='/pics/interface/dot_y.gif' border=0></td>
+	</tr>
+<!--	<tr><td colspan="2"><img src="/pics/blank.gif" border=0 width="1" height="<?= $nSep ?>"></td></tr>
+	<tr>
+		<td align="right" nowrap><font class='pMenuMain'><a href="<?= sprintf($sProductLink, 75) ?>" !onclick="return false" !onmouseover="popUp('HM_Menu3', event)" !onmouseout="popDown('HM_Menu3')">Free Flight</a></font></td>
+		<td>&nbsp;<img src='/pics/interface/dot_y.gif' border=0></td>
+	</tr> -->
+	<tr><td colspan="2"><img src="/pics/blank.gif" border=0 width="1" height="<?= $nSep ?>"></td></tr>
+	<tr>
+		<td align="right" nowrap><font class='pMenuMain'><a href="javascript:void(0)" onclick="return false" onmouseover="popUp('HM_Menu4', event)" onmouseout="popDown('HM_Menu4')">Nitro RC Planes</a></font></td>
+		<td>&nbsp;<img src='/pics/interface/dot_y.gif' border=0></td>
+	</tr>
+	<tr><td colspan="2"><img src="/pics/blank.gif" border=0 width="1" height="<?= $nSep ?>"></td></tr>
+	<tr>
+		<td align="right" nowrap>
+		<font class='pMenuMain'><a href="/product.php?category_id=28">RC Boats</a></font>
+<!-- 		
+<font class='pMenuMain'><a href="" !onclick="return false" !onmouseover="popUp('HM_Menu4', event)" !onmouseout="popDown('HM_Menu4')">RC Boats</a></font>
+ -->		</td>
+		<td>&nbsp;<img src='/pics/interface/dot_y.gif' border=0></td>
+	</tr>
+	<tr><td colspan="2"><img src="/pics/blank.gif" border=0 width="1" height="<?= $nSep ?>"></td></tr>
+	<tr>
+		<td align="right" nowrap><font class='pMenuMain'><a href="javascript:void(0)" onclick="return false" onmouseover="popUp('HM_Menu5', event)" onmouseout="popDown('HM_Menu5')">Engines</a></font></td>
+		<td>&nbsp;<img src='/pics/interface/dot_y.gif' border=0></td>
+	</tr>
+	<tr><td colspan="2"><img src="/pics/blank.gif" border=0 width="1" height="<?= $nSep ?>"></td></tr>
+	<tr>
+		<td align="right" nowrap><font class='pMenuMain'><a href="javascript:void(0)" onclick="return false" onmouseover="popUp('HM_Menu6', event)" onmouseout="popDown('HM_Menu6')">Radio Systems</a></font></td>
+		<td>&nbsp;<img src='/pics/interface/dot_y.gif' border=0></td>
+	</tr>
+	<tr><td colspan="2"><img src="/pics/blank.gif" border=0 width="1" height="<?= $nSep ?>"></td></tr>
+	<tr>
+		<td align="right" nowrap><font class='pMenuMain'><a href="/product.php?category_id=114">Ornithopter</a></font></td>
+		<td>&nbsp;<img src='/pics/interface/dot_y.gif' border=0></td>
+	</tr>
+<!-- 	<tr><td colspan="2"><img src="/pics/blank.gif" border=0 width="1" height="<?= $nSep ?>"></td></tr>
+	<tr>
+		<td align="right" nowrap><font class='pMenuMain'><a href="javascript:void(0)" onclick="return false" onmouseover="popUp('HM_Menu10', event)" onmouseout="popDown('HM_Menu10')">Scalextric</a></font></td>
+		<td>&nbsp;<img src='/pics/interface/dot_y.gif' border=0></td>
+	</tr> -->
+	<tr><td colspan="2"><img src="/pics/blank.gif" border=0 width="1" height="<?= $nSep ?>"></td></tr>
+	<tr>
+		<td align="right" nowrap><font class='pMenuMain'><a href="/product.php?category_id=85">Scalextric</a></font></td>
+		<td>&nbsp;<img src='/pics/interface/dot_y.gif' border=0></td>
+	</tr>
+	
+	<tr><td colspan="2"><img src="/pics/blank.gif" border=0 width="1" height="<?= $nSep ?>"></td></tr>
+	<tr>
+		<td align="right" nowrap><font class='pMenuMain'><a href="/product.php?category_id=101">Figures</a></font></td>
+		<td>&nbsp;<img src='/pics/interface/dot_y.gif' border=0></td>
+	</tr>
+	<tr><td colspan="2"><img src="/pics/blank.gif" border=0 width="1" height="<?= $nSep ?>"></td></tr>
+	<tr>
+		<td align="right" nowrap><font class='pMenuMain'><a href="/product.php?category_id=108">Robot</a></font></td>
+		<td>&nbsp;<img src='/pics/interface/dot_y.gif' border=0></td>
+	</tr>
+<!--	<tr><td colspan="2"><img src="/pics/blank.gif" border=0 width="1" height="<?= $nSep ?>"></td></tr>
+	<tr>
+		<td align="right" nowrap><font class='pMenuMain'><a href="/product.php?category_id=111">Mini Tank</a></font></td>
+		<td>&nbsp;<img src='/pics/interface/dot_y.gif' border=0></td>
+	</tr> -->
+	<tr><td colspan="2"><img src="/pics/blank.gif" border=0 width="1" height="<?= $nSep ?>"></td></tr>
+	<tr>
+		<td align="right" nowrap><font class='pMenuMain'><a href="/product.php?category_id=113">Die Cast</a></font></td>
+		<td>&nbsp;<img src='/pics/interface/dot_y.gif' border=0></td>
+	</tr>
+	<tr><td><hr color="#cccccc" style="height:1px;width:85px"><td>&nbsp;</td></td></tr>
+	<tr>
+		<td align="right" nowrap><font class='pMenuMain'><!a href="javascript:void(0)" onclick="return false" !onmouseover="popUp('HM_Menu7', event)" !onmouseout="popDown('HM_Menu7')"><font color="#ff6600">Accessories</font></a></font></td>
+		<td>&nbsp;</td>
+	</tr>
+<?
+		foreach ($dAccessories as $sAccessName => $dLink) {
+?>
+	<tr><td colspan="2"><img src="/pics/blank.gif" border=0 width="1" height="<?= $nSep ?>"></td></tr>
+	<tr>
+		<td align="right" nowrap><font class='pMenuMain'><?= getHtmlTag("a", $dLink, $sAccessName) ?>&nbsp;<img src='/pics/interface/dot_g.gif' border=0 align="absmiddle"></font></td>
+		<td>&nbsp;</td>
+	</tr>
+<?
+		}
+?>
+	<tr><td><hr color="#cccccc" style="height:1px;width:85px"><td>&nbsp;</td></td></tr>
+	<tr>
+		<td align="right" nowrap><font class='pMenuMain'><a href='/gallery'>Photo Gallery</a></font><br><br></td>
+		<td>&nbsp;<img src="/pics/interface/dot_b.gif" alt="" border="0" align="absmiddle"><br><br></td>
+	</tr>
+	<tr>
+		<td align="right" nowrap><font class='pMenuMain'><a href='/links.php'>Web Links</a></font><br><br></td>
+		<td>&nbsp;<img src="/pics/interface/dot_b.gif" alt="" border="0" align="absmiddle"><br><br></td>
+	</tr>
+	<tr>
+		<td align="right" nowrap><font class='pMenuMain'><a href='/about.php'>About Us</a></font><br><br></td>
+		<td>&nbsp;<img src="/pics/interface/dot_b.gif" alt="" border="0" align="absmiddle"><br><br></td>
+	</tr>
+	<tr>
+		<td align="right" nowrap><font class='pMenuMain'><a href='/contact.php'>Contact Us</a></font><br><br></td>
+		<td>&nbsp;<img src="/pics/interface/dot_b.gif" alt="" border="0" align="absmiddle"><br><br></td>
+	</tr>
+	<tr>
+		<td align="right" nowrap><font class='pMenuMain'><a href='/c_order.php'>Custom Order</a></font><br></td>
+		<td>&nbsp;<img src="/pics/interface/dot_b.gif" alt="" border="0" align="absmiddle"><br></td>
+	</tr>
+	
+	<tr><td><hr color="#cccccc" style="height:1px;width:85px"><td>&nbsp;</td></td></tr>
+	<tr>
+		<td align="right" nowrap><font class='pMenuMain'><a href='/info.php'>General Info</a></font><br><br><br></td>
+		<td>&nbsp;<img src="/pics/interface/dot_r.gif" alt="" border="0" align="absmiddle"><br><br><br></td>
+	</tr>
+	
+</table>	
+<?		
+	}  */
+
+
+?>

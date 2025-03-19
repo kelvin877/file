@@ -1,0 +1,426 @@
+<?php
+include_once 'include.php';
+
+
+$hdb = getConnection();
+
+ini_set('display_errors', 1);
+ini_set('display_startup_errors', 1);
+error_reporting(E_ALL);
+
+
+
+require_once __DIR__.'/vendor/autoload.php';
+
+use PhpOffice\PhpSpreadsheet\Spreadsheet;
+use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
+
+
+$spreadsheet = new Spreadsheet();
+
+
+$sheet = $spreadsheet->getActiveSheet();
+
+if(isset($_REQUEST['action']) && $_REQUEST['action'] == 'export'){
+
+  $export_start_date=$_REQUEST['export_start_date'];
+  $export_end_date=$_REQUEST['export_end_date'];
+  $companyid =$_REQUEST['companyid'];
+
+
+$sql_export = "SELECT * FROM
+                leave_detail AS ld
+                LEFT JOIN user AS u ON ld.user_id = u.id
+
+
+                LEFT JOIN (
+                    SELECT user_id, MAX(balance) AS balance
+                    FROM leave_balance
+                    WHERE type_of_leave = 'ANNUAL'
+                    GROUP BY user_id
+                ) AS lb ON u.id = lb.user_id
+
+                LEFT JOIN company AS c ON FIND_IN_SET(c.id, u.company) > 0 AND c.id=$companyid
+
+                WHERE ld.leave_date <= '$export_end_date' AND ld.is_exported ='N'
+                AND ld.status = 'Confirmed'
+                AND c.id=$companyid
+
+                ";
+
+$result = $hdb->query($sql_export);
+
+$sumByLeaveRecordIdAndUserId = array();
+
+$pay_day_array = [];
+$nopay_day_array = [];
+$total = 0;
+$current_year = date('Y');
+$yearEndDate = date('Y-12-31', strtotime($current_year . '-12-31'));
+$currentDateTime = date('Y-m-d H:i:s');
+
+
+$sheet->setCellValue('A1','From');
+
+$cellRange = 'A5:L5'; // Range of cells to apply the background color
+$sheet->getStyle($cellRange)->applyFromArray([
+    'fill' => [
+        'fillType' => \PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID,
+        'startColor' => ['rgb' => 'E5D1AA'] // Orange color
+    ],
+    'font' => [
+        'color' => ['rgb' => '000000'] // Black color for text
+    ]
+]);
+
+$range = 'A5:L5';
+
+for ($col = 'A'; $col <= 'L'; $col++) {
+    $cell = $col . '5';
+    $sheet->getStyle($cell)->getBorders()->getBottom()->setBorderStyle(\PhpOffice\PhpSpreadsheet\Style\Border::BORDER_THIN);
+}
+
+
+
+$sheet->setCellValue('A2','To');
+$sheet->setCellValue('A3','Export Date');
+
+$sheet->setCellValue('B1',$export_start_date);
+$sheet->setCellValue('B2', $export_end_date);
+$sheet->setCellValue('B3', $currentDateTime );
+
+$sheet->setCellValue('A5','Company');
+$sheet->setCellValue('B5',"Employee\r Number");
+$sheet->getStyle('B5')->getAlignment()->setWrapText(true);
+//$objPHPExcel->getActiveSheet()->getStyle('H5')->getBorders()->getBottom()->setBorderStyle(\PhpOffice\PhpSpreadsheet\Style\Border::BORDER_THIN);
+
+
+//getActiveSheet()->getStyle('H5')->getFont()->setUnderline(\PhpOffice\PhpSpreadsheet\Style\Font::UNDERLINE_SINGLE);
+
+$sheet->setCellValue('C5','Last Name');
+$sheet->setCellValue('D5','First Name');
+$sheet->setCellValue('E5','Date Joined');
+$sheet->setCellValue('F5','b/f fm');
+$sheet->setCellValue('G5',"Entitlement\r for".$current_year);
+$sheet->getStyle('G5')->getAlignment()->setWrapText(true);
+$sheet->setCellValue('H5',"Annual Leave\r Total Available");
+$sheet->getStyle('H5')->getAlignment()->setWrapText(true);
+$sheet->setCellValue('I5',"Total Usage\r as at Today");
+$sheet->getStyle('I5')->getAlignment()->setWrapText(true);
+
+$sheet->setCellValue('J5',"Total Annual Leave Balance\r as at year end");
+$sheet->getStyle('J5')->getAlignment()->setWrapText(true);
+$sheet->setCellValue('K5','Date');
+$sheet->setCellValue('L5','Total use');
+
+
+
+
+
+
+if(count($result) > 0){
+
+ foreach($result as $key => $value){
+   $type_of_leave = $value['type_of_leave'];
+   $user_id = $value['user_id'];
+   $leave_record_id = $value['leave_record_id'];
+   $number_of_day = $value['number_of_day'];
+   $company_name = $value['company_name'];
+   $leave_date = $value['leave_date'];
+   $is_paid_leave = $value['is_paid_leave'];
+    $staff_id =$value['staff_id'];
+    $first_name = $value['first_name'];
+    $last_name = $value['last_name'];
+    $joindate  = $value['joindate'];
+    $balance  = $value['balance'];
+
+   $sumByLeaveRecordIdAndUserId[$user_id][$type_of_leave][]=['date' => $leave_date,'number_of_days' => $number_of_day,'is_paid'=>$is_paid_leave,'staff_id'=>$staff_id,'company'=>$company_name,
+   'firstname'=>$first_name,'lastname'=>$last_name,'joindate'=>$joindate, 'leave_balance'=> $balance,'userid'=>$user_id];
+
+
+ }
+
+
+$row = 7;
+
+
+foreach($sumByLeaveRecordIdAndUserId as $user_id => $value){
+  //echo "User ID:".$user_id ;
+
+
+  $firstIteration = true;
+
+
+
+  foreach($value as $type_of_leave => $value1){
+
+
+
+    $cell = 'K'.$row;
+
+    $selected_leave = $TYPE_OF_LEAVE[$type_of_leave];
+    $Stype_of_leave = $selected_leave['display_title'];
+
+
+
+    $sheet->setCellValue($cell, $Stype_of_leave);
+
+
+
+
+    $row++;
+
+
+
+    $paytotal = 0;
+    $unpaytotal = 0;
+    //echo $type_of_leave;
+    $prev_bPaid = '';
+    $bDisplayPaidSubtotal = false;
+    $processedStaffIds = array();
+
+
+    foreach ($value1 as $index => $data) {
+
+      $is_paid =$data['is_paid'];
+      $number_of_days = $data['number_of_days'];
+      $date = $data['date'];
+      $staffid  = $data['staff_id'];
+      $company =$data['company'];
+      $firstname =$data['firstname'];
+      $lastname =$data['lastname'];
+      $joindate =$data['joindate'];
+      $leave_balance=$data['leave_balance'];
+      $user_id =$data['userid'];
+
+
+      if($firstIteration){
+        $sheet->setCellValue('A'.$row-1,$company);
+        $sheet->setCellValue('B'.$row-1,$staffid);
+        $sheet->setCellValue('C'.$row-1,$lastname);
+        $sheet->setCellValue('D'.$row-1,$firstname);
+        $sheet->setCellValue('E'.$row-1,$joindate);
+        $sheet->setCellValue('F'.$row-1,$leave_balance);
+        $sheet->setCellValue('G'.$row-1,getAnnualLeaveEntitlement($current_year,$user_id ));
+        $sheet->setCellValue('H'.$row-1,calculateTotalLeaveEntitlement($export_end_date,$user_id, ALLOW_USE_ENTITLEMENT ,false));
+
+        $sql_total_use = "SELECT sum(ld.number_of_day) as  total_number_of_days
+         from leave_detail as ld where ld.status='confirmed'
+          AND ld.type_of_leave ='ANNUAL'
+          and ld.leave_date <='$export_end_date' and ld.user_id='$user_id'";
+        $result = $hdb->query($sql_total_use);
+
+        if(count($result)>0){
+          foreach ($result as $key => $value) {
+            $total_number_of_days = $value['total_number_of_days'];
+          }
+
+        }
+
+
+        $sheet->setCellValue('I'.$row-1,$total_number_of_days);
+        $sheet->setCellValue('J'.$row-1,calculateTotalLeaveEntitlement($yearEndDate,$user_id, ALLOW_USE_ENTITLEMENT ,false));
+
+
+
+
+
+        $firstIteration = false;
+      }
+
+
+
+
+
+      /*if (!in_array($staffid, $processedStaffIds)) {
+        // If the staff ID is already processed, continue to the next iteration
+        $sheet->setCellValue('B'.$row , $staffid);
+        $processedStaffIds[] = $staffid;
+        //continue;
+    }else {
+      $sheet->setCellValue('B'.$row , '');
+    }*/
+
+
+
+
+      if($is_paid == 'Y'){
+        $prev_bPaid = 'Y';
+
+
+        $sheet->setCellValue('K'.$row , $date);
+        $sheet->setCellValue('L'.$row,$number_of_days);
+
+        /*echo '<pre>';
+        echo $type_of_leave." PayDate is".$date. "Number of day".$number_of_days." Row:".$row ;
+        echo '<pre>';*/
+
+        $paytotal += $number_of_days;
+
+        $row++;
+      }else {
+
+          // display the subtotal of the same type of paid days
+        if ($prev_bPaid =='Y' && ($bDisplayPaidSubtotal == false)){
+
+
+          $sheet->setCellValue('K'.$row,$Stype_of_leave." Paid Total");
+          $sheet->getStyle('K'.$row)->getFill()->setFillType(\PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID);
+          $sheet->getStyle('K'.$row)->getFill()->getStartColor()->setRGB('D0D192'); // Orange color
+
+          // Optionally, you can also set the font color to make the text visible against the background
+          $sheet->getStyle('K'.$row)->getFont()->getColor()->setRGB('000000');
+
+
+          $sheet->setCellValue('L'.$row,$paytotal);
+          $sheet->getStyle('L'.$row)->getFont()->setBold(true);
+
+          $sheet->getStyle('L'.$row)->getFill()->setFillType(\PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID);
+          $sheet->getStyle('L'.$row)->getFill()->getStartColor()->setRGB('D0D192'); // Orange color
+
+          // Optionally, you can also set the font color to make the text visible against the background
+          $sheet->getStyle('L'.$row)->getFont()->getColor()->setRGB('000000');
+
+            /*echo '<pre>';
+            echo $type_of_leave."Total: ".$paytotal." Row:".$row ;
+            echo '<pre>';*/
+            $bDisplayPaidSubtotal = true;
+            $row++;
+        }
+
+
+        $sheet->setCellValue('K'.$row, $date. ' (Unpaid)');
+        $sheet->setCellValue('L'.$row, $number_of_days);
+        //$sheet->getStyle('L'.$row)->getFont()->setBold(true);
+
+
+        $unpaytotal += $number_of_days;
+
+        $row++;
+      }
+
+
+
+    }
+
+
+      if($is_paid == 'Y' && ($bDisplayPaidSubtotal == false) ){
+
+        $sheet->setCellValue('K'.$row, $Stype_of_leave." Paid Total");
+
+        $sheet->getStyle('K'.$row)->getFill()->setFillType(\PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID);
+        $sheet->getStyle('K'.$row)->getFill()->getStartColor()->setRGB('D0D192'); // Orange color
+
+        // Optionally, you can also set the font color to make the text visible against the background
+        $sheet->getStyle('K'.$row)->getFont()->getColor()->setRGB('000000');
+
+
+        $sheet->setCellValue('L'.$row,$paytotal);
+        $sheet->getStyle('L'.$row)->getFont()->setBold(true);
+
+        $sheet->getStyle('L'.$row)->getFill()->setFillType(\PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID);
+        $sheet->getStyle('L'.$row)->getFill()->getStartColor()->setRGB('D0D192'); // Orange color
+
+        // Optionally, you can also set the font color to make the text visible against the background
+        $sheet->getStyle('L'.$row)->getFont()->getColor()->setRGB('000000');
+
+
+
+        /*echo '<pre>';
+        echo $type_of_leave."Total: ".$paytotal." Row:".$row ;
+        echo '<pre>';*/
+        $row++;
+      }else {
+
+        $sheet->setCellValue('K'.$row,$Stype_of_leave." Unpaid Total");
+        $sheet->getStyle('K'.$row)->getFill()->setFillType(\PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID);
+        $sheet->getStyle('K'.$row)->getFill()->getStartColor()->setRGB('D0D192'); // Orange color
+
+        // Optionally, you can also set the font color to make the text visible against the background
+        $sheet->getStyle('K'.$row)->getFont()->getColor()->setRGB('000000');
+
+
+        $sheet->setCellValue('L'.$row,$unpaytotal);
+        $sheet->getStyle('L'.$row)->getFont()->setBold(true);
+        $sheet->getStyle('L'.$row)->getFill()->setFillType(\PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID);
+        $sheet->getStyle('L'.$row)->getFill()->getStartColor()->setRGB('D0D192'); // Orange color
+
+        // Optionally, you can also set the font color to make the text visible against the background
+        $sheet->getStyle('L'.$row)->getFont()->getColor()->setRGB('000000');
+
+
+
+        $row++;
+      }
+
+
+
+
+
+
+    $row++;
+
+
+
+  }
+
+
+
+
+
+
+
+
+
+}
+
+
+
+
+
+
+
+
+
+
+
+
+}
+
+$formatted_start_date = date("Ymd",strtotime($export_start_date));
+$formatted_end_date = date("Ymd",strtotime($export_end_date));
+
+
+$filename = "leave_report_".$formatted_start_date."_to_".$formatted_end_date."_created_".date("Ymd_His").".xlsx";
+
+$path = EXPORT_PATH.$companyid.'/'. $filename;
+
+
+
+header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+header('Content-Disposition: attachment; filename="'.$filename.'"');
+header('Cache-Control: max-age=0');
+
+$writer = new Xlsx($spreadsheet);
+
+$writer->save($path);
+
+$writer->save('php://output');
+
+
+
+$update_sql = "Update leave_detail AS ld
+INNER JOIN user AS u ON ld.user_id = u.id
+INNER JOIN company AS c ON u.company = c.id
+SET ld.is_exported ='Y', exported_at = '$currentDateTime', export_period_start = '$export_start_date',export_period_end ='$export_end_date',export_filename='$filename'
+where ld.leave_date <= '$export_end_date' AND ld.is_exported = 'N' AND status ='Confirmed'
+AND (FIND_IN_SET('$companyid', company) > 0 OR FIND_IN_SET('$companyid', u.company) > 0) ";
+
+$hdb->query($update_sql);
+
+
+}
+
+
+
+ ?>

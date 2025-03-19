@@ -1,0 +1,441 @@
+<?php
+
+include 'include.php';
+include 'lib.login.php';
+
+
+$hdb = getConnection();
+
+
+$date = date('Y-m-d H:i:s');
+$action =  isset($_REQUEST[ "action" ]) && trim($_REQUEST[ "action" ]) ? trim( $_REQUEST[ "action" ]) : '';
+$uid= isset($_REQUEST[ "uid" ]) && trim($_REQUEST[ "uid" ]) ? trim( $_REQUEST[ "uid" ] ) : '';
+
+$leave_type="";
+
+$_SESSION['redirect_url'] = $_SERVER['SCRIPT_NAME'];
+
+
+//print_r($_SERVER);
+//$_SESSION['before_login_page_query_string']=$_SERVER["QUERY_STRING"];
+
+$bIslogin=getLoginDetail();
+
+
+if($bIslogin !== true){
+  header("location: login.php");
+  exit;
+}
+
+//$_SESSION['login_account'];
+
+$role=$_SESSION['login_account']['role'];
+
+$company=$_SESSION['login_account']['company'];
+
+$company_array=explode(',',$company);
+
+
+if(in_array('1',$company_array)){
+  $company_logo = 'https://hr.eseelynx.com/leave/images/logo_eseelynx.png';
+}elseif (in_array('2',$company_array)) {
+  $company_logo = 'https://hr.eseelynx.com/leave/images/logo_sealandair_blue.png';
+}
+
+//$bClearDataTableState
+$bClearDataTableState=true;
+
+
+
+// define the company logo
+/*if (strtolower($_SESSION['login_account']['company']) == '1,2'){
+	$company_logo = 'images/logo_eseelynx.png';
+}elseif (strtolower($_SESSION['login_account']['company']) == '2'){
+	$company_logo = 'images/logo_eseelynx.png';
+}*/
+
+
+function hasAccess($userRole, $requestedPage, $roleToPageMapping) {
+  global $roleToPageMapping;
+
+
+    // Check if the user's role exists in the mapping
+    if (isset($roleToPageMapping[$userRole])) {
+        $allowedPages = $roleToPageMapping[$userRole];
+
+        // Check if the requested page is allowed for the user's role
+        if (in_array($requestedPage, $allowedPages)) {
+            return true; // User has access to the requested page
+        }
+    }
+
+    return false; // User's role is not defined in the mapping or the page is not allowed
+}
+
+// Function to handle page access
+function handlePageAccess($userRole, $requestedPage, $roleToPageMapping) {
+  Global $roleToPageMapping;
+    if (hasAccess($userRole, $requestedPage, $roleToPageMapping)) {
+        // User has access to the requested page
+        // Proceed with displaying the page content
+        //echo "User with role '$userRole' has access to '$requestedPage'.";
+    } else {
+        echo "<pre>";
+        print_r($_SERVER);
+        echo "</pre>";
+
+        // User does not have access to the requested page
+        //echo "user have no right"; // Redirect to the login page
+        //header("Location: error.php");
+        if($userRole=='admin'|| $userRole=='executive'){
+          //echo '** debug 1 in header.php  '. getEnv("SCRIPT_NAME");
+          header("Location: user_listing.php");
+
+          exit;
+        }
+        if($userRole=='payroll'){
+            //echo '*** debug 2 in header.php '. getENv("SCRIPT_NAME");
+          header("Location: leave_record_payroll.php");
+          exit;
+        }
+        if($userRole=='supervisor'||$userRole=='user'){
+            //echo '*** debug 3 in header.php '. getEnv("SCRIPT_NAME");
+
+            header("Location: user_profile.php");
+          exit;
+        }
+
+    }
+}
+$requestedPage=$_SERVER['SCRIPT_NAME'];
+$requestedPage = str_replace('/leave/','',$requestedPage);
+//echo $requestedPage;
+handlePageAccess($role, $requestedPage, $roleToPageMapping);
+
+
+
+ ?>
+
+
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0,maximum-scale=1.0">
+    <title>Leave Management System</title>
+
+    <script src="js/jquery.js"></script>
+    <script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
+
+    <script src="https://cdn.datatables.net/1.13.6/js/dataTables.bootstrap5.min.js"></script>
+    <link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/dataTables.bootstrap5.min.css">
+
+    <!--  for datatable responsive package -->
+    <link href="https://cdn.datatables.net/responsive/2.5.0/css/responsive.dataTables.min.css" rel="stylesheet">
+    <script src="https://cdn.datatables.net/responsive/2.5.0/js/dataTables.responsive.min.js"></script>
+    <!--  end of datatable responsive package -->
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@200;400;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://hr.eseelynx.com/leave/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://hr.eseelynx.com/leave/css/customized.css?<?php echo time()?>">
+    <script src="https://hr.eseelynx.com/leave/js/bootstrap.bundle.min.js"></script>
+    <link rel="stylesheet" href="https://hr.eseelynx.com/leave/css/jquery-ui.min.css">
+    <script src="https://hr.eseelynx.com/leave/js/jquery-ui.js"></script>
+    <script src="https://hr.eseelynx.com/leave/js/jquery.blockUI.js"></script>
+    <script src="https://hr.eseelynx.com/leave/js/jquery.sumoselect.min.js"></script>
+    <link href="https://hr.eseelynx.com/leave/css/sumoselect.min.css" rel="stylesheet" />
+
+    <!--Fontawesome CDN-->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css" crossorigin="anonymous">
+
+
+
+    <style media="screen">
+
+    #tooltip {
+      position: absolute;
+      z-index: 1001;
+      display: none;
+      border: 2px solid #ebebeb;
+      border-radius: 5px;
+      padding: 10px;
+      background-color: #fff;
+    }
+
+
+    .arrow-down {
+        width: 0;
+        height: 0;
+        border-left: 5px solid transparent;
+        border-right: 5px solid transparent;
+        border-top: 5px solid #000;
+        display: inline-block;
+        margin-right: 5px;
+        transform: rotate(90deg);
+    }
+    .arrow-right {
+        width: 0;
+        height: 0;
+        border-top: 5px solid transparent;
+        border-bottom: 5px solid transparent;
+        border-left: 5px solid #000;
+        display: inline-block;
+        margin-right: 5px;
+    }
+    .error-message {
+        color: red;
+    }
+
+	.overlay{
+		display: none;
+		position: fixed;
+		width: 100%;
+		height: 100%;
+		top: 0;
+		left: 0;
+		z-index: 999;
+		background: rgba(255,255,255,0.8) url("loader.gif") center no-repeat;
+	}
+	/* Turn off scrollbar when body element has the loading class */
+	body.loading{
+		overflow: hidden;
+	}
+	/* Make spinner image visible when body element has the loading class */
+	body.loading .overlay{
+		display: block;
+	}
+
+
+
+
+    </style>
+
+    <script language="JavaScript">
+		$(document).ready(function(e){
+			$('#mNav').click(function(){
+				$('header').toggleClass('open');
+			})
+		});
+    </script>
+
+
+
+    <script type="text/javascript">
+    function message(msg){
+
+         $.blockUI({
+            message: msg,
+            fadeIn: 700, fadeOut: 700, timeout: 9000, showOverlay: false, centerY: false,
+            css: {
+                    //width: '500px', top: '40px', left: '', right: '30px',
+                    width: '400px', top: '40px', left: '', right: '10px',
+                    //width: '40%', top: '5%', left: '10%', right: '',
+                    border: '3px solid #aaa',
+                    padding: '20px', backgroundColor: '#F2F5A9',  '-webkit-border-radius': '10px', '-moz-border-radius': '10px',
+                    //opacity: 0.9,
+                    color: 'black'
+                }
+            });
+    }
+    </script>
+
+    <?php $currentURL = $_SERVER['SCRIPT_NAME']; ?>
+
+    <script type="text/javascript">
+    <?php if(strpos($currentURL,'leave_record.php') != false){ ?>
+          window.onload = function(){  localStorage.removeItem('DataTables_formtable_/leave/user_listing.php'); }
+    <?php  }elseif(strpos($currentURL,'user_listing.php') != false   || strpos($currentURL,'user.php') != false){ ?>
+         window.onload = function(){  localStorage.removeItem('DataTables_formtable_/leave/leave_record.php'); }
+         window.onload = function(){  localStorage.removeItem('DataTables_formtable_/leave/leave_record_payroll.php'); }
+    <?php } elseif(strpos($currentURL,'leave_record_payroll.php') != false ) {?>
+       window.onload = function(){  localStorage.removeItem('DataTables_formtable_/leave/user_listing.php'); }
+
+    <?php }else {?>
+         window.onload = resetAllDataTableState();
+    <? }    ?>
+
+
+      function resetAllDataTableState(){
+          localStorage.removeItem('DataTables_formtable_/leave/leave_record.php');
+          localStorage.removeItem( 'DataTables_formtable_/leave/user_listing.php');
+          localStorage.removeItem( 'DataTables_formtable_/leave/leave_record_payroll.php');
+          localStorage.removeItem( 'DataTables_formtable_/leave/all_user_leave_balance.php');
+        }
+
+      </script>
+  </head>
+
+	<div class="overlay"></div>
+	<body class="d-flex justify-content-center align-items-center" style="width:100%; ">
+	<header>
+
+        <img src="<?php echo $company_logo ?>" border="0" style="widht:20%" alt="Company logo" title="Company logo">
+        <nav>
+        	<figure><?php /*?><img src="images/profile.png" style="width:20%"><?php */?><?php echo "<strong>Hi,</strong> ". $_SESSION['login_account']['first_name']; ?>
+            </figure>
+
+            <?php if($role=='user' || $role=='supervisor'): ?>
+            <a href="user_profile.php" ><i class="fa-solid fa-user"></i>&nbsp;&nbsp;Dashboard</a>
+            <a href="leave_form.php"><i class="fa-regular fa-file"></i>&nbsp;&nbsp;Leave Request</a>
+            <a href="leave_balance.php"><i class="fa-solid fa-table"></i>&nbsp;&nbsp;Leave Balance</a>
+            <a href="leave_record.php"><i class="fa-solid fa-list"></i>&nbsp;&nbsp;Your Leave Records</a>
+            <a href="calendar_event.php"><i class="fa-regular fa-calendar"></i>&nbsp;&nbsp;Leave Record Calendar</a>
+          <?php endif; ?>
+
+            <?php if($role =='supervisor' ){?>
+                <a href="#">&nbsp;&nbsp;--- Backend ---</a>
+            <?php }?>
+
+
+            <?php if($role!='user' && $role !='payroll'): // only supervisor, executive and admin ?>
+                <a href="user_listing.php" class="subnav"><i class="fa-solid fa-user-group"></i>&nbsp;&nbsp;User List</a>
+                <a href="leave_record.php?p=admin"  class="subnav" ><i class="fa-solid fa-list"></i>&nbsp;&nbsp;Staff Leave Records
+                <span class="badge bg-primary" id="displayValue"></span>
+
+                </a>
+
+
+                <a href="all_user_leave_balance.php"  class="subnav" ><i class="fa-solid fa-list"></i>&nbsp;&nbsp;Staff Leave Balance
+                <span class="badge bg-primary" id="displayValue"></span></a>
+
+                </a>
+                <?php if($role != 'supervisor'): ?>
+                <a href="calendar_event.php"><i class="fa-regular fa-calendar"></i>&nbsp;&nbsp;Leave Record Calendar</a>
+                <?php endif; ?>
+                <a href="leave_record_payroll.php"><i class="fa-solid fa-list"></i>&nbsp;&nbsp;Export Staff Leave Records</a>
+                <a href="export_list.php"><i class="fa-solid fa-file-export"></i>&nbsp;&nbsp;Export List</a>
+
+			<?php  /*<div class="hasChild">
+            	<a href="#"><i class="fa-solid fa-people-group"></i>&nbsp;&nbsp;Admin</a>
+                <div>
+                	<a href="user_listing.php" class="subnav"><i class="fa-solid fa-user-group"></i>&nbsp;&nbsp;User List</a>
+                    <a href="leave_record.php?p=admin"  class="subnav" ><i class="fa-solid fa-list"></i>&nbsp;&nbsp;Staff Leave Records</a>
+                </div>
+            </div>  */?>
+            <?php endif; ?>
+
+
+            <?php if($role =='payroll'): ?>
+                <a href="user_listing.php"><i class="fa-solid fa-user-group"></i>&nbsp;&nbsp;User List</a>
+                <a href="leave_record_payroll.php"><i class="fa-solid fa-list"></i>&nbsp;&nbsp;Export Staff Leave Records</a>
+                <a href="export_list.php"><i class="fa-solid fa-file-export"></i>&nbsp;&nbsp;Export List</a>
+                <a href="calendar_event.php"><i class="fa-regular fa-calendar"></i>&nbsp;&nbsp;Leave Record Calendar</a>
+              <?php /* <div class="hasChild">
+                    	<a href="#"><i class="fa-solid fa-sack-dollar"></i>&nbsp;&nbsp;Payroll</a>
+                        <div>
+                        	<a href="user_listing.php" class="subnav"><i class="fa-solid fa-user-group"></i>&nbsp;&nbsp;User List</a>
+                            <a href="leave_record_payroll.php"  class="subnav" ><i class="fa-solid fa-list"></i>&nbsp;&nbsp;Export Staff Leave Records</a>
+                        </div>
+                    </div>
+            */?>
+            <?php endif; ?>
+            <a href="public_holiday.php" alt="Public holiday" title="Public holiday"><i class="fa-solid fa-calendar-week"></i>&nbsp;&nbsp;Public Holiday</a>
+            <a href="logout.php" alt="logout" title="logout" ><i class="fa-solid fa-right-from-bracket"></i>&nbsp;&nbsp;Logout</a>
+        </nav>
+        <div id="mNav">
+            <span></span>
+            <figure></figure>
+        </div>
+
+    </header>
+
+    <div class="container-fluid" id="mainContainer">
+
+      <!--Show warning message for public holiday -->
+      <?php
+      $currentYear = date('Y');
+      $nextYear = date('Y', strtotime('+1 year'));
+
+      $this_year_sql ="select * from public_holidays where is_delete ='N' and year = $currentYear ";
+      $next_year_sql ="select * from public_holidays where is_delete ='N' and year = $nextYear";
+
+      $current_year_data =$hdb->query($this_year_sql);
+      $next_year_data = $hdb->query($next_year_sql);
+
+      $hasinvalidDate = '';
+
+      if(count($current_year_data)<=0 || count($next_year_data)<=0){
+        $hasinvalidDate = true;
+        /*foreach($Data as $key => $value){
+          $public_holidays_date=$value['date'];
+          if($public_holidays_date=='0000-00-00'){
+            $hasinvalidDate = true;
+            break;
+          }
+        }*/
+      }
+
+      ?>
+      <?php
+      $current_page = basename($_SERVER['PHP_SELF']);
+
+      if($hasinvalidDate && $_SESSION['login_account']['role'] != 'user' && $current_page!='public_holiday.php' ): ?>
+        <div id="warningCell">
+          <p><?php if(count($current_year_data)<=0){
+            //echo 'Warning!! Please input '.$currentYear.' Public Holiday dates';
+            echo $currentYear.' Public Holiday dates  are missing and it will have a BIG impact on the leave calculation.  Use below button to fill in dates.';
+          } elseif(count($next_year_data)<=0 ){
+            //echo 'Warning!! Please input '.$nextYear.' Public Holiday dates';
+            echo $nextYear.' Public Holiday dates  are missing and it will have a BIG impact on the leave calculation.  Use below button to fill in dates.';
+          }else {
+            //echo 'Warning!! Please input  '.$currentYear.' and '.$nextYear.' Public Holiday dates';
+            echo $current.' and '.$nextYear.' Public Holiday dates  are missing and it will have a BIG impact on the leave calculation.  Use below button to fill in dates.';
+
+          }
+
+
+           ?></p>
+           <a class="row justify-content-center align-items-center" href="public_holiday.php?year=<?php
+           if(count($current_year_data) <=0){
+             echo $currentYear;
+           }elseif (count($next_year_data)<=0 ) {
+             echo $nextYear;
+           }else {
+             echo $currentYear;
+           }
+
+
+            ?>">Public Holiday </a>
+        </div>
+      <?php endif; ?>
+
+<script type="text/javascript">
+  var role = '<?php echo $role; ?>';
+  var company = '<?php echo $company; ?>';
+
+
+  function makeAjaxRequest() {
+      $.ajax({
+        url: 'leave_record.ajax.php',
+        type: 'post',
+        data:{action:'refresh', role:role, company:company },
+        success: function(response){
+          console.log(response);
+          var responseObject  = JSON.parse(response);
+          var total = responseObject.total;
+          //alert(response);
+          $('#displayValue').html(total);
+        },
+        error: function(){
+          //alert("Error");
+        }
+
+      });
+    }
+
+    $(document).ready(function() {
+        var role = '<?php echo $role; ?>';
+        if (role == 'supervisor' || role =='executive'){
+          makeAjaxRequest();
+          setInterval(makeAjaxRequest, 2000);
+        }
+
+
+          });
+
+
+
+
+</script>

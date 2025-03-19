@@ -1,0 +1,493 @@
+
+<?php include 'header.php';
+
+
+if(!isset($_SESSION["isLogin"]) || $_SESSION["isLogin"] !== true ){
+  header("location: login.php");
+  exit;
+}
+
+$selectedDate = isset($_REQUEST['selectdate']) && $_REQUEST['selectdate'] ? trim($_REQUEST['selectdate']) : date('Y-m-d');
+
+$role_account=$_SESSION['login_account']['role'];
+
+
+
+
+function isAdmin(){
+  //$role=$_SESSION['login_account']['role'];
+  $notallowedRole = array('user');
+
+  return isset($_SESSION['login_account']) && !in_array($_SESSION['login_account']['role'], $notallowedRole);
+
+}
+
+function accessDenied() {
+  // Redirect the user to an access denied page or show a message
+  redir('user_profile.php');
+  exit();
+}
+
+
+if (!isAdmin()) {
+  // User is not an admin, deny access
+  accessDenied();
+}
+
+
+?>
+
+
+
+<style media="screen">
+div.container{
+  width:100%;
+}
+div.left{
+  float: left;
+
+}
+
+.deactivate_button i:hover {
+        cursor: pointer;
+    }
+
+</style>
+
+
+
+<div class="row">
+  <h2 id="list_header">
+    User List
+    <?php
+    $selected_year = new DateTime($selectedDate);
+    $selected_year = $selected_year->format('Y');
+    ?>
+    <form id="balanceForm" action="" method="post" enctype='multipart/form'>
+      <label for="selectdate">Annual leave balance calculation counted up until:</label>
+      <input type="text" id="selectdate" name="selectdate" class="form-control form-control-lg" readonly value="<?php echo $selectedDate; ?>" />
+    </form>
+  </h2>
+</div>
+<?php if($role_account!='payroll'):?>
+  <button type="button" onclick="location.href='user.php?action=add'">Add new user</button>
+<?php endif; ?>
+
+<div class="container-fuild" id="userListCell">
+  <table id="formtable" class="table table-striped" style="width:100%">
+    <thead>
+      <tr>
+        <th>Firstname</th>
+        <th>Lastname</th>
+        <th>Email</th>
+        <th>Balance Days</th>
+        <th>Role</th>
+        <th>Type</th>
+        <th>Employee ID</th>
+        <th>Company</th>
+        <th>Division</th>
+        <th>JoinDate</th>
+        <?php if($role_account == 'payroll'): ?>
+          <th data-orderable="false">Details</th>
+          <th data-orderable="false">Active Status</th>
+        <?php endif; ?>
+        <?php if($role_account!='payroll'): ?>
+          <th data-orderable="false">Edit / View</th>
+          <th data-orderable="false">Active Status</th>
+        <?php endif; ?>
+      </tr>
+    </thead>
+    <tbody>
+      <?php
+      //include "include.php";
+      global $DIVISION,$JOB_TYPE;
+      $hdb = getConnection();
+      //$sql = "select * from user Where is_delete='N'";
+      $sql ="SELECT u.*, GROUP_CONCAT(c.company_name) AS combined_company_names
+      FROM user AS u
+      LEFT JOIN company AS c ON FIND_IN_SET(c.id, u.company) > 0
+      WHERE is_delete = 'N'
+      GROUP BY u.id";
+
+
+
+      $reportResult=$hdb->query($sql);
+
+      if(count ($reportResult) >0){
+        foreach ($reportResult as $key => $value) {
+          $firstname=$value['first_name'];
+          $lastname=$value['last_name'];
+
+          $username = $firstname.' '.$lastname;
+          $email=$value['email'];
+          $type_of_employment=$value['type_of_employment'];
+          $staffid=$value['staff_id'];
+          $division=$value['division'];
+          $joindate=$value['joindate'];
+          $id=$value['id'];
+          $role=$value['role'];
+          $company=$value['combined_company_names'];
+          $is_active =$value['is_active'];
+
+
+
+          ?>
+          <?php
+          if($is_active == 'Y'){
+            echo '<tr class="">';
+          }else {
+            echo '<tr class="inactive">';
+          }
+
+
+           ?>
+            <td><?php echo $firstname; ?></td>
+            <td><?php echo $lastname; ?></td>
+            <td><?php echo $email; ?></td>
+            <td><?php
+            if(($role == 'user' || $role =='supervisor') && $type_of_employment!= 'parttime'){
+              echo calculateTotalLeaveEntitlement($selectedDate, $id);
+            }else {
+              echo '-';
+            }
+
+            ?></td>
+            <td><?php echo $role; ?></td>
+            <td><?php
+            if($role == 'executives' || $role =='payroll' || $role=='admin'){
+              echo '-';
+            }else {
+              echo $JOB_TYPE[$type_of_employment];
+            }
+            ?></td>
+            <td><?php echo $staffid; ?></td>
+            <td><?php echo $company; ?></td>
+            <td><?php echo $DIVISION[$division]; ?></td>
+            <td nowrap><?php echo $joindate; ?></td>
+
+            <?php
+            if($role_account == 'payroll' ){
+              $title = 'View';
+
+              $bShowDelete = false;
+              $icon = '<img src="images/zoom-in.svg" border="0" >';
+            }else {
+              //$title = 'Edit';
+              $bShowDelete = true;
+              if($is_active =='Y'){
+                $title = 'Edit';
+                $icon = '<i class="fa-regular fa-pen-to-square fa-lg"></i>';
+              }else {
+                $title = 'View';
+                $icon = '<img src="images/zoom-in.svg" border="0" >';
+              }
+
+            }
+
+            ?>
+
+            <td>
+              <a id="user_view" href="user.php?action=updateadmin&id=<?php echo $id; ?>" alt="<?php echo $title.' '.$username.' detail'; ?> " title="<?php echo $title.' '.$username.' detail'; ?>"><?php echo $icon; ?></a>
+            </td>
+
+
+              <td>
+                <?php
+                if($bShowDelete == true){
+                  if($is_active == 'Y'){
+                    $active_status = '<span class="deactivate_button" data-name='.$username.'  data-id='.$id.'  alt="Click here to deactivate this user - '.$username.'" title="Click here to deactivate this user - '.$username.'"><i class="fa-regular fa-trash-can fa-lg"></i></span>';
+                  }else {
+                    $active_status = '<span>Deactivate</span>';
+                  }
+                }else{
+                  if($is_active == 'Y'){
+                    $active_status = '<span>Activing</span>';
+                  }else {
+                    $active_status = '<span>Deactivate</span>';
+                  }
+                }
+                echo $active_status;
+                //echo "hello";
+                ?>
+
+              </td>
+              <div class="modal fade" id="deactivate_modal" tabindex="-1" role="dialog" aria-labelledby="myModalLabel" aria-hidden="true" >
+                <div class="modal-dialog" style="max-width: 50vw;">
+                  <div class="modal-content">
+                    <div class="modal-header">
+                      <h5 class="modal-title">Deactivate User: <span class="username" ></span></h5>
+
+                      <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                        <span aria-hidden="true">&times;</span>
+                      </button>
+                    </div>
+                    <div class="modal-body" style="width:100%;">
+
+                      <span>Please be caution, there is no returning action once deactivate</span><br/>
+                      <input type="hidden" name="id" id="id" value="">
+                      <!--<p>Application Id: <span class="id"></span></p>-->
+
+                      <h5><span>Deactivate Date</span></h5>
+                      <input class="form-control form-control-lg"  name="deactivedate" id="deactivedatepicker" value="<?php
+                      $currentDate = date('Y-m-d');
+
+                      echo isset($_POST['deactivedate'])? $_POST['deactivedate'] : $currentDate; ?>" style="width:100%;" >
+
+
+
+                    </div>
+                    <div class="modal-footer">
+                      <button type="button" class="btn btn-secondary close" data-dismiss="modal">Close</button>
+                      <button type="submit"  name="deactivate" id="deactivate"  class="btn btn-primary deactivate-submit-btn">Deactivate</button>
+                    </div>
+
+                  </div>
+
+                </div>
+
+              </div>
+
+            <?php //endif; ?>
+
+
+          </tr>
+        <?php }}  ?>
+
+
+      </tbody>
+
+    </table>
+
+  </div>
+
+
+
+
+
+  <script type="text/javascript">
+
+  function showPopup() {
+    var link = "user.php"; // Replace with your desired link
+    var message = "Are you sure you want to continue?"; // Replace with your desired message
+
+    // Display a confirmation dialog with a link
+    if (confirm(message)) {
+      window.open(link, "_blank");
+    }
+  }
+
+
+  /*function logout() {
+  var xhr = new XMLHttpRequest();
+  xhr.open("GET", "logout.php", true);
+  xhr.onreadystatechange = function() {
+  if (xhr.readyState === 4 && xhr.status === 200) {
+  // Redirect to the login page or any other desired page
+  window.location.href = "login.php";
+}
+};
+xhr.send();
+}*/
+
+
+
+$(document).ready(function () {
+
+  var currentDate = new Date();
+  var minDate = new Date(currentDate);
+  var maxDate = new Date(currentDate);
+
+  minDate.setDate(currentDate.getDate() - 30);
+  maxDate.setDate(currentDate.getDate() + 30);
+
+  $("#deactivedatepicker").datepicker({
+      changeMonth: true,
+      changeYear: true,
+      dateFormat: "yy-mm-dd",
+      yearRange: "-100:+0",
+      minDate: minDate,
+      maxDate: maxDate
+
+  });
+
+
+
+
+
+  var deactivate_modal = new bootstrap.Modal(document.getElementById('deactivate_modal'), {});
+
+  $(document).on('click', '.deactivate_button', function() {
+    var id = $(this).data('id');
+    var name = $(this).data('name');
+
+    console.log(id);
+
+
+    $(".modal-header #username").val(name);
+    $(".modal-header .username").text(name);
+    deactivate_modal.show();
+
+    $(".modal-body #id").val(id);
+    $(".modal-body .id").text(id);
+    deactivate_modal.show();
+  });
+
+  $('#deactivate_modal .close').click(function() {
+    deactivate_modal.hide();
+  });
+
+  $('.deactivate-submit-btn').click(function(e){
+    e.preventDefault();
+  });
+
+  $('.deactivate-submit-btn').click(function(e) {
+    e.preventDefault();
+    // Get the claim ID from the modal body
+    //console.log($('#myForm').serialize())  ;
+    var id = $(".modal-body #id").val();
+    var deactivedate  = $(".modal-body #deactivedatepicker").val();
+
+
+    $.ajax({
+      type: "POST",
+      url: "leave_record.ajax.php",
+      // cache:false,
+      //data: $('#myForm').serialize(),
+      data: { action : 'deactivate_form' , id:id, deactivedate: deactivedate} ,
+      success: function(response){
+        response=JSON.parse(response);
+
+        var msg = "Form cancelled successfully!";
+        message(msg);
+        //	alert(response['comment']);
+        location.reload(true);
+
+      },
+      error: function(){
+        alert("Error");
+      }
+    });
+
+  });
+
+
+
+
+
+
+
+
+
+
+
+
+<?php
+if(isset($_SESSION['save'])  && $_SESSION['save'] = 'save_success'){
+ ?>
+var msg = "Information has saved.";
+message(msg);
+
+
+<?php
+  unset($_SESSION['save']);
+}
+ ?>
+
+  $('#selectdate').datepicker({
+    changeMonth: true,
+    changeYear: true,
+    dateFormat: 'yy-mm-dd',
+    minDate: "-5M",
+    maxDate: "+24M",
+    yearRange:"-0:+2",
+    onSelect: function(selectedDate) {
+      // showLeaveBalance();
+      //$("body").addClass("loading");
+      $('#balanceForm').submit(); // form submit
+      //	 $("body").removeClass("loading");
+
+    }
+  });
+
+
+
+
+
+
+  $(document).on('click', '.delete_button', function(e) {
+
+    e.preventDefault();
+
+    var id = $(this).data('claimid');
+
+    if(confirm("Are you sure you want to delete this?")){
+
+      $.ajax({
+        type: "POST",
+        url: "leave_record.ajax.php",
+        // cache:false,
+        //data: $('#myForm').serialize(),
+        data: { action : 'delete' ,  id: id} ,
+        success:function(response){
+          console.log(response);
+
+          //alert('cancel success');
+          location.reload(true);
+
+        },
+        error: function(){
+          alert("Error");
+        }
+
+      });
+    }
+    else{
+      console.log('Cancellation canceled.');
+    }
+
+  });
+
+
+
+
+
+
+  $('#formtable').DataTable({
+    //ordering:false,
+    //"LengthChange": false,
+    "stateSave": true,
+    //  "scrollX": true,
+    // "scrollCollapse": true,
+    'responsive':true,
+    "pagingType": 'full_numbers',
+    "paging" :   true,
+    "info": true,
+
+  });
+  /*
+  var userClicked = false;
+  var currenURL = window.location.href;
+  console.log(currenURL);
+
+  $(document).on('click', '#user_view', function() {
+
+  userClicked = true;
+
+});
+
+if(!userClicked || currenURL != 'https://hr.eseelynx.com/leave/user_listing.php'){
+//localStorage.removeItem( 'DataTables_formtable_/leave/leave_record.php')
+localStorage.removeItem( 'DataTables_formtable_/leave/user_listing.php')
+}
+
+*/
+
+
+
+});
+
+
+
+</script>
+
+<?php include 'footer.php'; ?>

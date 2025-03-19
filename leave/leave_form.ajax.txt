@@ -1,0 +1,53 @@
+<?php
+
+include_once 'include.php';
+
+$hdb = getConnection();
+
+$response=array();
+
+if(isset($_REQUEST['form_action']) && $_REQUEST['form_action'] == 'next_button' ){
+
+  //$form_data=$_REQUEST['formData'];
+  $_SESSION['leave_application']=$_REQUEST;
+
+  $data = $_SESSION['leave_application'];
+  $id =$_SESSION['login_account']['id'];
+
+  $startdate_data = $data['startdate'];
+  $enddate_data = $data['enddate'];
+  $startdate = strtotime($startdate_data);
+  $enddate = strtotime($enddate_data);
+
+  $convert_startdate = date("Y-m-d",$startdate);
+  $convert_enddate = date("Y-m-d",$enddate);
+
+
+  $sql = "SELECT count(*) as total from leave_table where start_date <=:enddate  AND end_date >=:startdate AND (status ='Pending' OR status='Approved' OR status='Confirmed') and user_id =:userid";
+
+  $parameters=array('startdate'=>$convert_startdate,'enddate'=>$convert_enddate, 'userid'=> $id);
+  $result = $hdb->query($sql,$parameters);
+
+  $count = $result[0]['total'];
+
+  if($count >0){
+    echo 'overlap';
+  }else {
+    $response = array('success'=>true,'formData'=>$_SESSION['leave_application']);
+
+    echo json_encode($response);
+  }
+
+
+
+}
+
+
+
+
+
+
+
+
+
+?>

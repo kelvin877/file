@@ -1,0 +1,560 @@
+<?php include 'header.php'; ?>
+
+<?php
+//session_start();
+//include_once 'include.php';
+
+
+//print_r($_REQUEST);
+$date = date('Y-m-d H:i:s');
+
+//$hdb = getConnection();
+if(!isset($_SESSION["isLogin"]) || $_SESSION["isLogin"] !== true ){
+  header("location: login.php");
+  exit;
+}
+
+$action =  isset($_REQUEST[ "action" ]) && trim($_REQUEST[ "action" ]) ? trim( $_REQUEST[ "action" ] ) : '';
+$role_p =  isset($_REQUEST[ "p" ]) && trim($_REQUEST[ "p" ]) ? trim( $_REQUEST[ "p" ] ) : '';
+$list_selected = isset($_REQUEST[ "list_selected" ]) && trim($_REQUEST[ "list_selected" ]) ? trim( $_REQUEST[ "list_selected" ] ) : 'CONFIRMED_LIST';
+$year_select = isset($_REQUEST[ "yearSelect" ]) && trim($_REQUEST[ "yearSelect" ]) ? trim( $_REQUEST[ "yearSelect" ] ) : 'show_all';
+
+
+$export_start_date = isset($_REQUEST['export_start_date']) && $_REQUEST['export_start_date'] ? trim($_REQUEST['export_start_date']) : date('Y-m-d');
+$export_end_date = isset($_REQUEST['export_end_date']) && $_REQUEST['export_end_date'] ? trim($_REQUEST['export_end_date']) : date('Y-m-d');
+$export_check = isset($_REQUEST[ "export_check" ]) && trim($_REQUEST[ "export_check" ]) ? trim( $_REQUEST[ "export_check" ] ) : 'show_all';
+
+
+$role=$_SESSION['login_account']['role'];
+
+$id =$_SESSION['login_account']['id'];
+
+$firstname=$_SESSION['login_account']['first_name'];
+$email=$_SESSION['login_account']['email'];
+$type_of_employment = $_SESSION['login_account']['type_of_employment'];
+
+
+$company = isset($_REQUEST['company']) && $_REQUEST['company'] ? trim($_REQUEST['company']) : $_SESSION['login_account']['company'];
+
+
+
+function isAdmin(){
+  //$role=$_SESSION['login_account']['role'];
+$notallowedRole = array('user');
+
+return isset($_SESSION['login_account']) && !in_array($_SESSION['login_account']['role'], $notallowedRole);
+
+}
+
+
+//function handleRestrictedParameter($param){
+  if(isAdmin()){
+    //echo "hello";
+  }else {
+    //header('HTTP/1.1 403 Forbidden');
+        //echo "Access Forbidden.";
+    redir("leave_record.php");
+    exit;
+  }
+//}
+
+
+/*if(isset($_GET['p'])){
+handleRestrictedParameter($_GET['p']);
+}*/
+/*if (($role == 'executive' || $role == 'payroll' || $role == 'admin') && !isset($_GET['p'])) {
+    redir("leave_record_payroll.php?p=admin");
+    exit; // Exit to prevent further script execution after the header redirection
+}*/
+/*if($role =='admin' && !isset($_GET['p'])){
+  header("location: leave_record.php?p=admin");
+}*/
+
+
+/*else {
+  header('HTTP/1.1 403 Forbidden');
+        //echo "Access Forbidden.";
+        exit;
+}*/
+
+
+
+  /*main();
+
+  function main(){
+    show_form();
+
+  }*/
+
+
+ ?>
+
+
+    <?php /*function show_form() {
+
+          global $action;
+          global $STATUS_LIST;
+          global $list_selected;
+          global $role_p;
+          global $year_select;
+          //global $company_option;
+          global $TYPE_OF_LEAVE;
+          global $export_start_date;
+          global $export_end_date;
+          global $company;
+          global $id;
+          global $export_check;*/
+
+          $hdb = getConnection();
+       ?>
+<form id="listForm" action="" method="post">
+
+         <div class="row">
+
+    <h2 id="list_header">Leave Records-<?php
+      if (isset($_POST['list_selected'])) {
+        echo $STATUS_LIST[$_POST['list_selected']] ?? '';
+    } else {
+        echo $STATUS_LIST['CONFIRMED_LIST'];
+    }
+    ?></h2>
+
+
+        <input type="text" id="export_start_date" name="export_start_date" class="form-control form-control-lg"  readonly value="<?php echo $export_start_date?>" />
+
+
+        <input type="text" id="export_end_date" name="export_end_date" class="form-control form-control-lg"  readonly value="<?php echo $export_end_date?>" />
+
+      <?php
+      $companyid =$_SESSION['login_account']['company'];
+      //$currentURL = $_SERVER['REQUEST_URI'];
+
+
+      if(strpos($companyid,',') !== false ): ?>
+
+        <select class="form-control form-control-lg" name="company" >
+            <option value="" disabled>Choose Company</option>
+            <?php
+            $sql = "SELECT DISTINCT c.company_name,c.id
+                    FROM user u
+                    JOIN company c ON FIND_IN_SET(c.id,u.company)
+                    WHERE u.id = $id";
+
+            $company_option=$hdb->query($sql);
+
+             if(count($company_option)>0){
+            foreach ($company_option as $value => $label) {
+              $value = $label['id']; // Replace 'company_id' with the actual column name for the option value
+              $label = $label['company_name'];
+              //$hidden  = ($value === 'PENDING_LIST' && $role=='user') ? 'hidden' : '';
+
+              $selected = (isset($_POST['company']) && $_POST['company'] == $value) ? 'selected' : '';
+                 echo '<option value="' . $value . '"  ' . $selected . '>' . $label . '</option>';
+            }
+          }
+            ?>
+        </select>
+
+      <?php endif; ?>
+
+
+
+
+
+        <select class="form-control form-control-lg" name="export_check" >
+            <option value="" disabled>Choose option</option>
+            <?php
+            $export_list = array(
+              'N'=>'Not exported',
+              'Y'=>'Exported'
+
+            );
+
+            foreach ($export_list as $value => $label){
+              $selected = (isset($_POST['export_check']) && $_POST['export_check'] == $value ) ? 'selected' : '';
+
+               echo '<option value="' . $value . '"  ' . $selected . '>' . $label . '</option>';
+
+            }
+
+
+             ?>
+
+
+
+        </select>
+
+
+      <input  type="submit" value="Submit">
+
+
+    <?php
+
+    global $id,$action,$firstname;
+
+    $company_id_value =$_SESSION['login_account']['company'];
+
+
+    $valueArray=explode(',',$company_id_value);
+    //echo $valueArray[1];
+    $companyid=$valueArray[0];
+    /*if(strpos($companyid,',')){
+     echo 'hello';
+    }else {
+     echo 'hi';
+    }*/
+
+    $company_sql="";
+
+
+
+    if(isset($_POST['company'])){
+     $companyid=$_POST['company'];
+    }
+
+    if($export_check == 'N'){
+      $leave_date_sql = "ld.leave_date <= '$export_end_date'";
+    }else {
+      $leave_date_sql = "ld.leave_date between '$export_start_date' AND '$export_end_date' ";
+    }
+
+
+
+
+    $company_sql ="AND (FIND_IN_SET($companyid, company) > 0 OR FIND_IN_SET($companyid, u.company) > 0)";
+
+
+
+    $sql = "SELECT ld.*,lt.balance_day_until_end_date,lt.type_of_leave,u.first_name,u.last_name,u.staff_id,u.type_of_employment,
+          SUM(ld.number_of_day) AS total_leave_days,
+          GROUP_CONCAT(DISTINCT c.company_name SEPARATOR ', ') AS combined_company_names
+         FROM leave_detail AS ld
+         JOIN user AS u ON ld.user_id = u.id
+         LEFT JOIN company AS c ON FIND_IN_SET(c.id, u.company) > 0 AND c.id = $companyid
+         INNER JOIN leave_table AS lt ON ld.leave_record_id = lt.reference_id
+         WHERE $leave_date_sql
+         AND ld.status = 'Confirmed'
+         AND ld.is_exported = '$export_check'
+         $company_sql
+         GROUP BY ld.user_id, ld.leave_record_id";
+
+
+     //print_r($sql);
+
+
+    $reportResult=$hdb->query($sql);
+
+
+
+    //$bexport_button = false;
+    if(count($reportResult)>0){
+      $bexport_button = "true";
+    }else {
+      $bexport_button = "false";
+    }
+
+     if($export_check=='N' &&  $bexport_button == "true" ): ?>
+    <div class="col-md-3 mb-4">
+      <button type="button" class="export_button" data-startdate="<?php echo $export_start_date; ?>" data-enddate="<?php echo $export_end_date; ?>"  data-companyid="<?php echo $company; ?>" >Export</button>
+    </div>
+  <?php endif; ?>
+
+
+
+
+
+</form>
+
+
+             <table id="formtable" class="table table-striped" style="width:100%">
+               <thead>
+                 <tr>
+                   <th>Employee name</th>
+                   <th>Start date</th>
+                   <th>End date</th>
+                   <th>No. of days</th>
+                   <th>Balance days</th>
+                   <th>Leave type</th>
+                   <th>Type</th>
+                   <th>Submit date</th>
+                   <!--<th>reference Id</th>-->
+                   <th>Company</th>
+
+                   <?php if($export_check =='Y'): ?>
+                    <th>Download</th>
+
+                  <?php endif; ?>
+                 </tr>
+               </thead>
+
+               <tbody>
+                 <?php
+
+                 if(count($reportResult)>0){
+
+                   $offdaysum = 0;
+                   $offdaySumByUserId = array();
+
+                   foreach ($reportResult as $key => $value) {
+
+                    $leave_date =$value['leave_date'];
+                    $first_name =$value['first_name'];
+                    $last_name = $value['last_name'];
+                    $staff_id =$value['staff_id'];
+                    $start_date=$value['leave_start_date'];
+                    $end_date =$value['leave_end_date'];
+                    $number_of_day=$value['total_leave_days'];
+                    $combined_company_names=$value['combined_company_names'];
+                    $type_of_employment =$value['type_of_employment'];
+                    $created_at=$value['created_at'];
+                    $leave_record_id=$value['leave_record_id'];
+                    $status=$value['status'];
+                    $type_of_leave=$value['type_of_leave'];
+                    $userid = $value['user_id'];
+                    $export_filename = $value['export_filename'];
+                    $balance_day_until_end_date =$value['balance_day_until_end_date'];
+
+                  ?>
+                <tr>
+
+                <td><?php echo $first_name.' '.$last_name.'(' . $staff_id . ')'; ?></td>
+                <td><?php echo $start_date;?></td>
+                <td><?php echo $end_date; ?></td>
+                <td><?php echo $number_of_day; ?></td>
+                <td><?php
+                if(array_key_exists($userid,$offdaySumByUserId)){
+                  $offdaySumByUserId[$userid] += $number_of_day;
+                }else {
+                  $offdaySumByUserId[$userid] = $number_of_day;
+                }
+
+                $end_date_time = new DateTime($end_date);
+                $end_date_year = $end_date_time->format('Y');
+                $current_year = date('Y');
+
+
+                if($type_of_leave=='ANNUAL'){
+
+                  if($type_of_employment=='fulltime'){
+                    //echo calculateTotalLeaveEntitlement($specific_date=$end_date,$userid)."\n".'(Annual Balance)';
+
+                    if($end_date_year == $current_year){
+                      echo $balance_day_until_end_date."\n".'(Annual Balance)';
+                    }
+
+                  }else {
+                    echo '';
+                  }
+                }
+                elseif ($type_of_leave =='SICK_LEAVE') {
+                  if($type_of_employment=='fulltime'){
+                    //echo calculateMedicalLeaveBalance($specific_date=$end_date,$userid)."\n".'(Medical Balance)';
+                    echo $balance_day_until_end_date."\n".'(Medical Balance)';
+                  }else {
+                    echo '';
+                  }
+                }
+                elseif ($type_of_leave =='PERSONAL_LEAVE') {
+                  if($type_of_employment=='fulltime'){
+                    $pay_personal_balance =calculatePersonalLeaveBalance($requested_date=$end_date,$userid,PAID_LEAVE);
+                    $unpay_personal_balance = calculatePersonalLeaveBalance($requested_date=$end_date,$userid,UNPAID_LEAVE);
+                    //echo ($pay_personal_balance + $unpay_personal_balance)."\n".'(Personal Balance)';
+
+                    if($end_date_year == $current_year){
+                      echo $balance_day_until_end_date."\n".'(Personal Balance)';
+                    }
+                  }else {
+                    echo '';
+                  }
+                }
+
+
+
+
+
+                ?> </td>
+                <td><?php
+                $selected_leave = $TYPE_OF_LEAVE[$type_of_leave];
+
+
+                echo $selected_leave['display_title']; ?></td>
+                <td><?php echo $type_of_employment; ?></td>
+                <td><?php echo $created_at; ?></td>
+                <!--<td><?php echo $leave_record_id;?></td>-->
+                <td><?php echo $combined_company_names;?></td>
+                <?php if($export_check=='Y'): ?>
+                <td><a alt="Download" title="Download" href='download.php?file=<?php echo urldecode($export_filename);?>&companyid=<?php echo $companyid; ?>'>Download</a></td>
+              <?php endif; ?>
+
+                </tr>
+
+
+              <?php }} ?>
+
+
+
+
+               </tbody>
+
+
+
+
+             </table>
+
+
+
+
+
+
+         </div>
+
+       <?php //} ?>
+
+
+
+
+       </div>
+
+
+     <?php include 'footer.php'; ?>
+
+<script type="text/javascript">
+
+
+
+$(document).ready(function () {
+
+  $('#export_start_date').datepicker({
+    changeMonth: true,
+    changeYear: true,
+    dateFormat: 'yy-mm-dd',
+    //yearRange:"-0:+1",
+
+    onSelect: function(selectedDate) {
+      // Set the minimum selectable date for the end date picker
+      $('#export_end_date').datepicker('option', 'minDate', selectedDate);
+
+    }
+  });
+
+  $('#export_end_date').datepicker({
+    changeMonth: true,
+    changeYear: true,
+    dateFormat: 'yy-mm-dd',
+    //yearRange:"-0:+1",
+
+    onSelect: function(selectedDate) {
+      // Set the maximum selectable date for the start date picker
+      $('#export_start_date').datepicker('option', 'maxDate', selectedDate);
+
+    }
+  });
+
+
+  $(document).on('click', '.export_button', function() {
+
+    var export_start_date = $(this).data('startdate');
+    var export_end_date = $(this).data('enddate');
+    var companyid = $(this).data('companyid');
+
+
+
+  if(confirm("Are you sure you want to [Export] this application?")){
+
+    window.open('export_leave_record.php?<?php echo time()?>&action=export&export_start_date='+export_start_date+'&export_end_date='+export_end_date+'&companyid='+companyid);
+
+    window.opener.location.reload();
+  }
+  else{
+      console.log('Cancellation canceled.');
+  }
+
+});
+
+
+
+
+
+  var table = $('#formtable').DataTable({
+    //ordering:false,
+    "bLengthChange": false,
+    "bFilter": true,
+    "bInfo": false,
+    "ordering":false,
+    "stateSave": true,
+    "scrollX": true,
+    "scrollCollapse": true,
+
+    /*"columDefs":[
+      {
+          "targets": 5,
+          orderable:false,
+      }
+    ],*/
+
+  });
+
+
+
+  $('.submit-btn').click(function(e) {
+	  e.preventDefault();
+        // Get the claim ID from the modal body
+		 console.log($('#myForm').serialize())  ;
+		 var claim_id = $(".modal-body #claim_id").val();
+     var firstname = $(this).data('firstname');
+     var id = $(this).data('id');
+     var email = $(this).data('email');
+
+
+      $.ajax({
+        type: "POST",
+        url: "leave_record.ajax.php",
+       // cache:false,
+        //data: $('#myForm').serialize(),
+		data: { action : 'reject_form' ,  claim_id: claim_id, claim_comment: $("#reject_comment").val(), firstname:firstname, id:id, email:email } ,
+      success: function(response){
+			response=JSON.parse(response);
+		//	alert(response['comment']);
+			$("#contact").html(response)
+      if(response['success']==true){
+        //
+        var msg = "Form submitted successfully!";
+        message(msg);
+
+    // Reload the page after a delay (if needed)
+    setTimeout(function() {
+        location.reload(true);
+    }, 2000);
+
+
+        myModal.hide();
+        //location.reload(true);
+      }
+		 },
+      error: function(){
+			alert("Error");
+		 }
+   });
+
+
+});
+
+
+
+});
+
+
+/*function formatChildRow(cell) {
+    var name = $(cell).closest('tr').find('td:nth-child(2)').text();
+    var html = '<div style="padding: 10px;">';
+    html += '<strong>Name:</strong> ' + comment + '<br>';
+    html += 'Additional information about ' + comment;
+    html += '</div>';
+    return html;
+}*/
+
+
+
+
+
+</script>

@@ -1,0 +1,685 @@
+<?php
+include 'header.php';
+include_once 'include.php';
+
+
+$id =$_SESSION['login_account']['id'];
+$firstname=$_SESSION['login_account']['first_name'];
+$lastname=$_SESSION['login_account']['last_name'];
+$email=$_SESSION['login_account']['email'];
+
+$employeeid=$_SESSION['login_account']['staff_id'];
+$division=$_SESSION['login_account']['division'];
+$birthday=$_SESSION['login_account']['birthday'];
+$joindate=$_SESSION['login_account']['joindate'];
+$role=$_SESSION['login_account']['role'];
+$jobtype =$_SESSION['login_account']['type_of_employment'];
+$company =$_SESSION['login_account']['company'];
+$num_hour_work_per_day =$_SESSION['login_account']['num_hour_work_per_day'];
+$num_day_work_per_week =$_SESSION['login_account']['num_day_work_per_week'];
+$save_button =$_SESSION['login_account']['save_button_on_leave_form'];
+
+$companyArray = explode(',', $company);
+$firstCompany = $companyArray[0];
+
+$sql ="select * from company where id = $firstCompany";
+$result = $hdb->query($sql);
+if(count($result)>0){
+  $value = $result[0];
+  $company_name = $value['company_name'];
+  $type = $value['incorporation_type'];
+}
+
+
+
+$_SESSION['leave_default_off_date']="";
+
+
+$fullname = $firstname.' '.$lastname;
+
+$create_date = date('Y-m-d H:i:s');
+
+//print_r($_SESSION['leave_application']);
+//print_r($_SESSION);
+if(isset($_SESSION['leave_application'])){
+
+  $data = $_SESSION['leave_application'];
+  $comment = $data['comment'];
+
+  if(isset($data['single_day_dropdown'])){
+    $single_day_dropdown=$data['single_day_dropdown'];
+  }else {
+    $single_day_dropdown="";
+  }
+
+
+
+
+  $leave_type = $data['leave_type'];
+  $startdate_data =$data['startdate'];
+  $enddate_data = $data['enddate'];
+
+
+
+  $startdate = strtotime($startdate_data);
+  $enddate = strtotime($enddate_data);
+  $number_of_day = 1;
+  $current_timestamp = $startdate;
+
+
+
+  $convert_startdate = date("Y-m-d",$startdate);
+  $convert_enddate = date("Y-m-d",$enddate);
+  $create_date = date("Y-m-d H:i:s");
+
+
+  $dataRange = [];
+
+  while($startdate <= $enddate){
+    $dateRange[] = date("Y-m-d",$startdate);
+    $startdate = strtotime("+1 day",$startdate);
+
+  }
+
+  $warningMessage = "";
+
+  if(isset($_POST["action"])&&$_POST['action']=="add_item"){
+
+    if($company_name == 'eSeeLYNX'){
+      $type_sql = "and (type = 'federal' or type ='all') or (holiday='Family Day' AND is_delete='N')";
+    }else {
+      if($type =='federal'){
+        $type_sql = "and (type = 'federal' or type ='all')";
+      }
+      if($type =='bc'){
+        $type_sql = "and (type = 'bc' or type ='all')";
+      }
+    }
+
+
+
+    $sql = "select date from public_holidays where is_delete ='N' $type_sql";
+    $result = $hdb->query($sql);
+    $excludedDateArray = array();
+
+    //if($save_button =='Y'){
+      foreach ($result as $row) {
+        $excludedDateArray[] = $row['date'];
+
+      }
+    /*}else {
+      $excludedDateArray[] = $row['date'];
+      //$excludedDateArray = array();
+    }*/
+
+
+    $numbers_day_off = array();
+    $default_off_day = array();
+    $off_date = array();
+
+    foreach ($dateRange as $date) {
+
+      $selectName = "regular_day_off_" . $date;
+
+      $regular_day_off = isset($_POST[$selectName]) ? $_POST[$selectName] : 'no';
+
+
+
+      if($regular_day_off=="yes"){
+        $numbers_day_off[] = $date;
+        $date_off = strtotime($date);
+        $date_off = date('Y-m-d',$date_off);
+        $off_date[] = $date_off;
+
+      }
+    }
+
+
+    $days=count_pre_stage_days($startdate_data,$enddate_data,$excludedDateArray,$single_day_dropdown,$numbers_day_off);
+
+    if($type == 'bc'){
+      $pay_sick_leave_balance = calculateMedicalLeaveBalance($startdate_data,$id,PAID_LEAVE,$bShowDebug=true,'',$type);
+      $unpay_sick_leave_balance = calculateMedicalLeaveBalance($startdate_data,$id,UNPAID_LEAVE,$bShowDebug=true,'',$type);
+
+        $sick_leave_balance = $pay_sick_leave_balance + $unpay_sick_leave_balance;
+    }else {
+      $sick_leave_balance =  calculateMedicalLeaveBalance($startdate_data,$id,PAID_LEAVE,$bShowDebug=true,'',$type);
+    }
+
+      //if it is not same year
+      if(!isNextYear($startdate_data) && isNextYear($enddate_data)){
+        $this_year_startdate = $startdate_data;
+        $this_year_enddate = date('Y-12-31');
+        $currentYear = date('Y');
+        $nextYear = $currentYear + 1;
+        $next_year_startdate = date('Y-m-d',strtotime("$nextYear-01-01"));
+        $next_year_enddate= $enddate_data;
+        $this_year_off_date=array();
+        $next_year_off_date=array();
+        foreach ($off_date as $value){
+          if(!isNextYear($value)){
+            $this_year_off_date[] = $value;
+
+          }else {
+            $next_year_off_date[] = $value;
+          }
+        }
+        if(!empty($this_year_off_date)){
+          $this_year_off_days=count($this_year_off_date);
+          $this_year_off_date_string = implode(',',$this_year_off_date);
+        }else {
+          $this_year_off_days=0;
+          $this_year_off_date_string = "";
+        }
+
+        if(!empty($next_year_off_date)){
+          $next_year_off_days=count($next_year_off_date);
+          $next_year_off_date_string = implode(',',$next_year_off_date);
+        }else {
+          $next_year_off_days=0;
+          $next_year_off_date_string = "";
+        }
+
+        $this_year_common_offday = array_intersect($excludedDateArray,$this_year_off_date);
+        $this_year_common_Count = count($this_year_common_offday);
+
+        $next_year_common_offday = array_intersect($excludedDateArray,$next_year_off_date);
+        $next_year_common_Count = count($next_year_common_offday);
+
+
+
+        $this_year_days=count_pre_stage_days($this_year_startdate,$this_year_enddate,$excludedDateArray,$single_day_dropdown,$numbers_day_off);
+        $this_year_default_off_date=$_SESSION['leave_default_off_date'];
+        $this_year_default_off_date_array = explode(',',$this_year_default_off_date);
+        $next_year_days=count_pre_stage_days($next_year_startdate,$next_year_enddate,$excludedDateArray,$single_day_dropdown,$numbers_day_off);
+        $next_year_default_off_date=$_SESSION['leave_default_off_date'];
+        $next_year_default_off_date_array = explode(',',$next_year_default_off_date);
+
+        $sum_days = $days;
+
+
+
+        $data = array(
+          array($this_year_startdate,$this_year_enddate,$this_year_days,$leave_type,$fullname,$create_date,$comment,$this_year_default_off_date),
+          array($next_year_startdate,$next_year_enddate,$next_year_days,$leave_type,$fullname,$create_date,$comment,$next_year_default_off_date)
+        );
+        $sql = "Insert into leave_table set start_date=:startdate, end_date=:enddate,user_id=:id, type_of_leave=:leavetype, number_of_day=:days,comment=:comment, created_at=:create_date,user_name=:username,regular_day_off=:regular_day_off,company_id=:company_id,company_name=:company_name ";
+
+
+
+        switch ($leave_type){
+
+
+          case 'SICK_LEAVE':
+              if($sum_days>$sick_leave_balance){
+                $warningMessage = "Your sick leave balance is not enough.";
+              }else {
+
+                processLeave($data, $sql, $leave_type);
+
+              }
+            break;
+          case 'PERSONAL_LEAVE':
+          $paypersonalbalance =calculatePersonalLeaveBalance($startdate_data,$id,PAID_LEAVE);
+          $unpaypersonalbalance = calculatePersonalLeaveBalance($startdate_data,$id,UNPAID_LEAVE);
+
+
+
+              if ($sum_days>($unpaypersonalbalance + $paypersonalbalance )){
+                $warningMessage = "Your Personal Leave is not enough.";
+              }
+              else {
+                if(isNextYear($enddate_data)){
+                  $warningMessage = "Personal Leave cannot apply next year";
+                }else {
+                  processLeave($data, $sql, $leave_type);
+                }
+              }
+            break;
+            case 'BEREAVEMENT_LEAVE':
+            $pay_bereavement_balance = calculateBereavementLeaveBalance($startdate_data,$id,$type ,PAID_LEAVE);
+            $unpay_bereavement_balance = calculateBereavementLeaveBalance($startdate_data,$id,$type ,UNPAID_LEAVE);
+
+
+            if($sum_days > ($pay_bereavement_balance + $unpay_bereavement_balance)){
+              $warningMessage = "Your Bereavment Leave is not enough.";
+            }else {
+              if(isNextYear($enddate_data)){
+                $warningMessage = "Bereavment Leave cannot apply next year";
+              }else {
+                processLeave($data, $sql, $leave_type);
+              }
+
+
+            }
+            break;
+            default:
+                processLeave($data, $sql, $leave_type);
+
+            break;
+
+        }
+
+      }else {
+
+        $days = count_pre_stage_days($startdate_data,$enddate_data,$excludedDateArray,$single_day_dropdown,$numbers_day_off);
+        $off_date_string  = $_SESSION['leave_default_off_date'];
+        //echo $off_date_string;
+
+
+        $sum_days=$days;
+
+        $sql="Insert into leave_table set start_date=:startdate, end_date=:enddate,user_id=:id,type_of_leave=:leavetype,number_of_day=:days,comment=:comment,
+        created_at=:create_date,user_name=:username,regular_day_off=:regular_day_off, company_id=:company_id, company_name=:company_name";
+
+        $parameters=array('startdate'=>$startdate_data , 'enddate'=>$enddate_data , 'id'=>$id, 'leavetype'=>$leave_type,'days'=>$days,'username'=>$fullname,'create_date'=>$create_date,'comment'=>$comment,'regular_day_off'=>$off_date_string,'company_id'=>$firstCompany,'company_name'=>$company_name);
+
+        switch ($leave_type) {
+          case 'SICK_LEAVE':
+              if($sum_days>$sick_leave_balance){
+                $warningMessage = "Your sick leave balance is not enough.";
+              }else {
+
+                $hdb->query($sql,$parameters);
+                $leave_record_id = $hdb->lastInsertId();
+
+                echo send_email($leave_record_id,'create',$email,'',$role);
+                echo claim_item($leave_record_id,'create',$id,$firstname);
+
+                insertLeaveDetail($startdate_data,$enddate_data,$numbers_day_off,$leave_type,$create_date,$id,$excludedDateArray,$leave_record_id,$single_day_dropdown);
+
+                redir('user_profile.php');
+              }
+            break;
+          case 'PERSONAL_LEAVE':
+          $paypersonalbalance =calculatePersonalLeaveBalance($startdate_data,$id,PAID_LEAVE);
+          $unpaypersonalbalance = calculatePersonalLeaveBalance($startdate_data,$id,UNPAID_LEAVE);
+
+
+              if ($sum_days> ($unpaypersonalbalance + $paypersonalbalance)){
+                $warningMessage = "Your Personal Leave is not enough.";
+              }else {
+                if(isNextYear($enddate_data)){
+                  $warningMessage = "Personal Leave cannot apply next year";
+                }else {
+
+
+                $hdb->query($sql,$parameters);
+                $leave_record_id = $hdb->lastInsertId();
+
+                echo send_email($leave_record_id,'create',$email,'',$role);
+                echo claim_item($leave_record_id,'create',$id,$firstname);
+
+                insertLeaveDetail($startdate_data,$enddate_data,$numbers_day_off,$leave_type,$create_date,$id,$excludedDateArray,$leave_record_id,$single_day_dropdown);
+
+                redir('user_profile.php');
+                }
+              }
+
+          break;
+
+          case 'BEREAVEMENT_LEAVE':
+
+          $pay_bereavement_balance = calculateBereavementLeaveBalance($startdate_data,$id,$type ,PAID_LEAVE);
+          $unpay_bereavement_balance = calculateBereavementLeaveBalance($startdate_data,$id,$type ,UNPAID_LEAVE);
+
+          if($sum_days > ($pay_bereavement_balance + $unpay_bereavement_balance)){
+            $warningMessage = "Your Bereavment Leave is not enough.";
+          }else {
+            if(isNextYear($enddate_data)){
+              $warningMessage = "Bereavment Leave cannot apply next year";
+            }else {
+
+              $hdb->query($sql,$parameters);
+              $leave_record_id = $hdb->lastInsertId();
+
+              echo send_email($leave_record_id,'create',$email,'',$role);
+              echo claim_item($leave_record_id,'create',$id,$firstname);
+              insertLeaveDetail($startdate_data,$enddate_data,$numbers_day_off,$leave_type,$create_date,$id,$excludedDateArray,$leave_record_id,$single_day_dropdown);
+
+              redir('user_profile.php');
+            }
+
+          }
+          break;
+
+          default:
+
+                  $hdb->query($sql,$parameters);
+                  $leave_record_id = $hdb->lastInsertId();
+
+                  echo send_email($leave_record_id,'create',$email,'',$role);
+                  echo claim_item($leave_record_id,'create',$id,$firstname);
+
+                  insertLeaveDetail($startdate_data,$enddate_data,$numbers_day_off,$leave_type,$create_date,$id,$excludedDateArray,$leave_record_id,$single_day_dropdown);
+
+                  redir('user_profile.php');
+            break;
+        }
+
+
+
+      }
+
+
+
+
+  }
+
+
+}else {
+  $dateRange=array();
+}
+
+function count_pre_stage_days($startdate, $enddate,$excludedDateArray,$single_day_dropdown,$numbers_day_off) {
+  $start = new DateTime($startdate);
+  $end = new DateTime($enddate);
+  $diff = $start->diff($end);
+  $days = $diff->days + 1;
+  $flag = false;// Initialize a flag variable
+  $off_date= array();
+  // Check if the start and end dates are the same day
+  $isSameDay = $start->format('Y-m-d') === $end->format('Y-m-d');
+
+  $excludeDays = 0;
+  $currentDate = $start;
+  while ($currentDate <= $end) {
+    $dayOfWeek = $currentDate->format('Y-m-d'); // Get the day of the week (1 - Monday, 7 - Sunday)
+    $formattedDate = $currentDate->format('Y-m-d');
+
+
+    if (in_array($dayOfWeek, $numbers_day_off) || in_array($formattedDate, $excludedDateArray)) {
+
+      $off_date[] = $formattedDate;
+      $excludeDays++;
+    }else {
+      if ($isSameDay && ($single_day_dropdown === 'morning' || $single_day_dropdown === 'afternoon')) {
+        //$days=0;
+        $excludeDays += 0.5;
+      }
+    }
+
+
+    $currentDate->add(new DateInterval('P1D')); // Move to the next day
+  }
+  $_SESSION['leave_default_off_date']=implode(',',$off_date);
+  return $days - $excludeDays;
+}
+
+
+
+
+?>
+
+<?php if(isset($_SESSION['leave_application'])): ?>
+
+  <style media="screen">
+
+  /*.form-check-input + .form-check-label .custom-label-bg {
+    background-color: lightgray;
+  }
+
+  .form-check-input:checked + .form-check-label .custom-label-bg {
+  background-color: red;
+}*/
+
+.inputGroup {
+  background-color: #D1D7DC;
+  display: block;
+  margin: 10px 0;
+  position: relative;
+}
+.inputGroup label {
+  padding: 12px 30px;
+  width: 100%;
+  display: block;
+  text-align: left;
+  color: #3C454C;
+  cursor: pointer;
+  position: relative;
+  z-index: 2;
+  transition: color 200ms ease-in;
+  overflow: hidden;
+}
+.inputGroup label:before {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  content: "";
+  background-color: #7FABF0;
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%) scale3d(1, 1, 1);
+  transition: all 300ms cubic-bezier(0.4, 0, 0.2, 1);
+  opacity: 0;
+  z-index: -1;
+}
+.inputGroup label:after {
+  width: 32px;
+  height: 32px;
+  content: "";
+  border: 2px solid #D1D7DC;
+  background-color: #fff;
+  background-image: url("data:image/svg+xml,%3Csvg width='32' height='32' viewBox='0 0 32 32' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M5.414 11L4 12.414l5.414 5.414L20.828 6.414 19.414 5l-10 10z' fill='%23fff' fill-rule='nonzero'/%3E%3C/svg%3E ");
+  background-repeat: no-repeat;
+  background-position: 2px 3px;
+  border-radius: 50%;
+  z-index: 2;
+  position: absolute;
+  right: 30px;
+  top: 50%;
+  transform: translateY(-50%);
+  cursor: pointer;
+  transition: all 200ms ease-in;
+}
+.inputGroup input:checked ~ label {
+  color: #fff;
+}
+.inputGroup input:checked ~ label:before {
+  transform: translate(-50%, -50%) scale3d(56, 56, 1);
+  opacity: 1;
+}
+.inputGroup input:checked ~ label:after {
+  background-color: #40A367;
+  border-color: #40A367;
+}
+.inputGroup input {
+  width: 32px;
+  height: 32px;
+  order: 1;
+  z-index: 2;
+  position: absolute;
+  right: 30px;
+  top: 50%;
+  transform: translateY(-50%);
+  cursor: pointer;
+  visibility: hidden;
+}
+
+
+
+
+  </style>
+  <body>
+    <section class="vh-100 gradient-custom">
+      <div class="row justify-content-center align-items-center">
+        <div class="col-12 col-lg-12 col-xl-7">
+          <div class="card mb-6">
+            <div class="card-body">
+
+                <!--<div class="row mb-4">
+                    <div class="col-sm-4"> Please check the day you are off:-->
+
+                    <!--</div>
+                  </div>-->
+
+
+              <form class="originalOff" action="" id="myForm" method="post">
+                <h2 style="color:red;">For employees with irregular shifts, please select your regular day(s) off where applicable:</h2>
+                <input type="hidden" id="startdate" name="startdate" class="form-control form-control-lg" value="<?php echo $convert_startdate; ?>"  readonly />
+                <input type="hidden" id="enddate" name="enddate" class="form-control form-control-lg" value="<?php echo $convert_enddate; ?>"  readonly />
+                <input type="hidden" name="action" value="add_item">
+                <?php
+                foreach ($dateRange as $date):
+
+                  ?>
+                  <div class="row mb-4">
+
+
+                  <div class="col-sm-6 pl-1">
+                    <div class="inputGroup">
+                        <input class="form-check-input" type="checkbox" name="regular_day_off_<?php echo $date; ?>" value="yes" id="regular_day_off_<?php echo $date; ?>">
+
+                        <label class="form-check-label" for="regular_day_off_<?php echo $date; ?>"  data-id="<?php echo $date?>">
+                          <h2><?php echo $date . ' ('. date('D',strtotime($date)) .')'; ?></h2>
+                          <span></span>
+                        </label>
+
+                      </div>
+                    </div>
+
+
+                  </div>
+
+                <?php endforeach; ?>
+
+
+                <div class="row buttons">
+                  <div class="col-sm-1 mt-4">
+                    <button type="button" name="save_button" id="save_button">Submit</button>
+                    <button type="button" name="back_button" id="back_button" style="margin-left:20px;">Back</button>
+                  </div>
+                </div>
+
+                <div id="warningMessage" style="color: red;">
+                  <?php echo $warningMessage; ?>
+
+                </div>
+
+
+              </form>
+
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+
+
+    </section>
+
+
+  </body>
+
+  <?php //unset($_SESSION['leave_application']); ?>
+
+<?php endif; ?>
+
+
+
+<script type="text/javascript">
+
+
+$(".form-check-label").on('click', function(event){
+     sDate = $(this).data("id");
+  //   alert(sDate);
+    // alert($('#regular_day_off_'+sDate).is(":checked"));
+    if ($('#regular_day_off_'+sDate).is(":checked")){
+      //alert('uncheck');
+      //alert($(this).find('span').text);
+      $(this).find('span').text("");
+    }else $(this).find('span').text('Your regular day off.');
+})
+
+
+
+
+
+$('#myForm').submit(function(e){
+  e.preventDefault();
+  var startdate = $('#startdate').val();
+  var enddate = $('#enddate').val();
+
+  console.log('startdate');
+
+
+  $.ajax({
+    url:'backend_script.php',
+    method:'POST',
+    data: { startdate: startdate, enddate: enddate },
+    success: function(response) {
+      if (response === 'overlap') {
+        $('#warningMessage').text('Date range already exists. Please back to choose different dates.');
+      } else {
+        // Date range is valid, submit the form
+        $('#warningMessage').text(''); // Clear the warning message
+        $('#myForm').unbind('submit').submit(); // Allow form submission
+      }
+    },
+    error: function() {
+      $('#warningMessage').text('Error occurred during validation. Please try again.');
+    }
+  });
+
+});
+
+
+$("#back_button").click(function() {
+  window.location.href='leave_form.php';
+
+});
+
+var formSubmitted = false; // Variable to track if the form has been submitted
+
+$("#save_button").click(function() {
+
+  // Check if the form has already been submitted
+  if (formSubmitted) {
+    return false; // Prevent multiple clicks
+  }
+
+  var startdate = $("#startdate").val();
+  var enddate = $("#enddate").val();
+  var warningMessage = $("#warningMessage").text().trim();
+
+  $("#startdate_error").text("");
+  $("#enddate_error").text("");
+
+  var error = false;
+
+  if (startdate == "") {
+    $("#startdate_error").text("Please input Start date");
+    error = true;
+  }
+
+  if (enddate == "") {
+    $("#enddate_error").text("Please input End date");
+    error = true;
+  }
+
+  if (!error) {
+    var confirmation = confirm("ALERT: Have you chosen the correct irregular shift days?");
+    if(confirmation){
+      // Disable the "Save" button to prevent multiple submissions
+      $("#save_button").prop("disabled", true);
+
+      // Mark the form as submitted
+      //formSubmitted = true;
+
+      // Submit the form
+      $('#myForm').submit();
+
+      // Re-enable the button after a certain time (e.g., 3 seconds) if needed
+      setTimeout(function() {
+        $("#save_button").prop("disabled", false);
+      }, 3000); // 3000 milliseconds (3 seconds)
+    }
+
+  }
+});
+
+
+
+</script>

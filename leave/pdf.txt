@@ -1,0 +1,410 @@
+<?php
+require_once __DIR__ . '/vendor/autoload.php';
+include_once 'include.php';
+
+/*$name = isset($_GET['name']) ? $_GET['name'] : 'Default Name';
+$company = isset($_GET['company']) ? $_GET['company'] : 'Default Company';
+$staffid = isset($_GET['staffid']) ? $_GET['staffid'] : 'Default Staffid';
+$startdate = isset($_GET['startdate']) ? $_GET['startdate'] : 'Default startdate';
+$enddate = isset($_GET['enddate']) ? $_GET['enddate'] : 'Default enddate';
+$offday = isset($_GET['offday']) ? $_GET['offday'] : 'Default offday';
+$reason = isset($_GET['reason']) ? $_GET['reason'] : 'Default Reason';
+$applydate = isset($_GET['applydate']) ? $_GET['applydate'] : 'Default Applydate';
+$leavetype = isset($_GET['leavetype']) ? $_GET['leavetype'] : 'Default Leavetype';
+$status = isset($_GET['status']) ? $_GET['status'] : 'Default Status';
+$leave_record_id = isset($_GET['reference_id']) ? $_GET['reference_id'] : 'Default Status';*/
+
+$reference_id =isset($_GET['reference_id']) ? $_GET['reference_id'] : 'Default';
+$claim_note_status =isset($_GET['status']) ? $_GET['status'] : 'Default';
+//$balance_day =isset($_GET['balance_day']) ? $_GET['balance_day'] : 'Default';
+//$id = isset($_GET['id']) ? $_GET['id'] : 'Default ID';
+//$companyid  = isset($_GET['companyid']) ? $_GET['companyid'] : 'Default Companyid';
+
+
+/*$LEAVE_TIME = array(
+  'full_day'=>'Full Day',
+  'morning'
+
+);*/
+
+
+
+$hdb = getConnection();
+
+
+$sql = "SELECT leave_table.*, user.*,
+GROUP_CONCAT(DISTINCT c.company_name SEPARATOR ', ') AS combined_company_names,
+leave_table.created_at AS user_created_at,
+claim_notes.*
+FROM user LEFT JOIN company AS c ON FIND_IN_SET(c.id, user.company) > 0
+INNER JOIN leave_table ON leave_table.user_id=user.id
+left join claim_notes on claim_notes.leave_record_id = leave_table.reference_id
+WHERE reference_id=$reference_id and note_type='$claim_note_status'
+GROUP BY claim_notes.leave_record_id";
+
+//print_r($sql);
+//exit;
+
+$reportResult=$hdb->query($sql);
+
+
+
+foreach ($reportResult as $key => $value){
+  $reference_id=$value['reference_id'];
+  $username=$value['user_name'];
+  $userid=$value['user_id'];
+  $start_date=$value['start_date'];
+  $end_date=$value['end_date'];
+  $user_create_date=$value['user_created_at'];
+  $create_date=new DateTime($create_date);
+
+
+  $number_of_day=$value['number_of_day'];
+  $type_of_leave =$value['type_of_leave'];
+  $selected_leave = $TYPE_OF_LEAVE[$type_of_leave];
+
+  $status=$value['status'];
+  $staff_id=$value['staff_id'];
+  $company =$value['combined_company_names'];
+  $type_of_employment = $value['type_of_employment'];
+  $leave_record_id = $value['reference_id'];
+  $regular_day_off = $value['regular_day_off'];
+  $comment = $value['comment'];
+  $reject_note = $value['reject_note'];
+  $cancel_note = $value['cancel_note'];
+  $notes = $value['notes'];
+  $leave_time        =$value['leave_time'];
+
+  $balance_day_until_end_date = $value['balance_day_until_end_date'];
+
+  $added_by = $value['added_by'];
+  $created_at = $value['created_at'];
+
+  $default_off_day = $value['default_off_day'];
+
+  $formatted_regular_day_off = str_replace(',', '<br>', $regular_day_off);
+
+
+}
+
+
+$check_approve_sql = "Select * from claim_notes where leave_record_id=$leave_record_id";
+
+$result =$hdb->query($check_approve_sql);
+$note_type=array();
+
+foreach($result as $key => $value){
+  $note_type[] =$value['note_type'];
+
+  if($value['note_type']=='Approved'){
+    $approved_by = $value['added_by'];
+    $approved_at = $value['created_at'];
+    $approve_notes = $value['notes'];
+    $approved_status = $value['note_type'];
+  }
+
+  if($value['note_type']=='Confirmed'){
+    $confirmed_by = $value['added_by'];
+    $confirmed_at = $value['created_at'];
+    $confirmed_notes = $value['notes'];
+    $confirmed_status = $value['note_type'];
+  }
+
+  if($value['note_type']== 'Cancelled' ){
+    $cancelled_by = $value['added_by'];
+    $cancelled_at = $value['created_at'];
+    $cancelled_notes = $value['notes'];
+    $cancelled_status = $value['note_type'];
+  }
+
+
+
+}
+
+if(empty($reject_note.$cancel_note)){
+  $remark = "";
+}else {
+  $remark = $reject_note.$cancel_note;
+}
+
+
+/*if($value['reject_note'].$value['cancel_note'] == ""){
+  $remark = "";
+
+}else {
+  $remark = $value['reject_note'].$value['cancel_note'];
+
+}*/
+
+
+
+if($status == 'Pending' ){
+
+  $added_by  = "";
+  $added_by_title = "";
+}else {
+  $added_by_title ="By";
+  $added_by  = $added_by;
+}
+
+
+if($leave_time != 'full_day'){
+   $sleave_time =$leave_time;
+}
+
+
+if($type_of_leave != 'ANNUAL'){
+
+}else {
+
+}
+
+
+
+
+
+$html = '
+<html>
+<head>
+   <style>
+      /* Add your custom styles here */
+      body {
+         font-family: Arial, sans-serif;
+      }
+
+      .leave-form {
+         padding: 20px;
+         border: 1px solid #ccc;
+      }
+
+      table {
+         width: 100%;
+         border-collapse: collapse;
+         margin-top: 10px;
+      }
+
+      th, td {
+
+         padding: 5px;
+         text-align: left;
+      }
+   </style>
+</head>
+<body>
+  <h1 style="text-align: center;">Leave Record #'.$reference_id.'</h1>
+   <div class="leave-form">
+
+      <h1>1. Employee Details</h1>
+      <table>
+         <tr>
+            <th>Company</th>
+            <th>Name</th>
+            <th>Employee No.</th>
+         </tr>
+         <tr>
+            <td>'.$company.'</td>
+            <td>'.$username.'</td>
+            <td>'.$staff_id.'</td>
+         </tr>
+      </table>
+      <hr>
+      <h1>2. Absence Period</h1>
+      <table >
+        <tr>
+          <th>Type</th>
+          <th>From</th>
+          <th>To</th>
+          <th >No. of Days</th>';
+
+          if($status!='Cancelled'){
+            $html .= '<th>Balance Days</th>';
+          }
+        $html .='</tr>
+        <tr>
+          <td style="width:20%;">'.$selected_leave['display_title'].'</td>
+          <td style="width:20%;">'.$start_date.'</td>
+          <td style="width:20%;">'.$end_date.'</td>
+          <td style="width:20%;">'.$number_of_day.' '.$sleave_time.'</td>
+          <td style="width:20%;">'.$balance_day_until_end_date.' <br>until '.$end_date.'</td>
+
+        </tr>
+      </table>
+      <table>
+        <tr>
+          <th>Regular day(s) off, for employees with irregular shift </th>
+          <th>Apply Date</th>
+
+        </tr>
+        <tr>
+          <td>'.$formatted_regular_day_off .'</td>
+          <td>'.substr($user_create_date,0,16).'</td>
+        </tr>
+      </table>';
+
+      if($type_of_leave != 'ANNUAL'){
+        $check_paid_sql = "SELECT * from leave_detail where leave_record_id= '$reference_id'";
+
+
+        $paid_result = $hdb->query($check_paid_sql);
+
+
+        $html.='<table>
+                <tr>
+                  <th>Date List</th>
+                </tr><tr><td>';
+
+
+
+            foreach($paid_result as $key => $value){
+              $leave_date=$value['leave_date'];
+              $is_paid_leave =$value['is_paid_leave'];
+
+              if($is_paid_leave == 'Y'){
+                $message = '[PAID]';
+              }else {
+                $message = '[UNPAID]';
+              }
+
+              $html.= $leave_date.' '.$message.'<br>';
+            }
+
+            $html.='</td></tr>
+              </table>';
+
+
+      }
+
+
+
+      $html .='<table>
+        <tr>';
+
+        if(!empty($comment)){
+          $html .= '<th>Remark</th>';
+        }
+        $html .= '</tr>
+                  <tr>';
+
+        if(!empty($comment)){
+          $html .= '<td>' . $comment . '</td>';
+        }
+        $html .= '</tr>
+                  </table>
+                  ';
+
+
+        if(in_array('Approved',$note_type)){
+          $html.= '
+                  <hr>
+                  <h1>3. Processing History</h1>
+                  <table>
+                    <tr>
+                      <th>Status</th>
+                      <th>By</th>
+                      <th>Created At</th>
+                    </tr>
+                    ';
+          if(!empty($approved_by)){
+            $html .= '<tr><td>'.$approved_status.'</td>
+                      <td>'.$approved_by.'</td>
+                      <td>'.substr($approved_at,0,16).'</td></tr>';
+
+          }
+          if(!empty($confirmed_by)){
+            $html .= '<tr><td>'.$confirmed_status.'</td>
+                      <td>'.$confirmed_by.'</td>
+                      <td>'.substr($confirmed_at,0,16).'</td></tr>';
+          }
+          if(!empty($cancelled_by)){
+            $html .= '<tr><td>'.$cancelled_status.'</td>
+                      <td>'.$cancelled_by.'</td>
+                      <td>'.substr($cancelled_at,0,16).'</td></tr>';
+          }
+
+
+          $html.='
+                  </table>
+                  <hr>
+                  <h1>4. Status</h1>
+                  ';
+        }else {
+          $html.= '
+                  <hr>
+                  <h1>3. Status</h1>';
+        }
+
+
+      $html.='
+          <table>
+            <tr>
+              <th>Type</th>
+              <th>Status</th>
+              <th>'.$added_by_title.'</th>
+              <th>Created At</td>';
+
+
+
+
+
+
+      $html .='</tr>
+            <tr>
+              <td>'.$selected_leave['display_title'].'</td>
+              <td>'.$status.'</td>
+              <td>'.$added_by.'</td>
+              <td>'.substr($created_at,0,16).'</td>';
+      $html.='</tr>
+
+                </table>
+                <table>
+                  <tr>';
+
+      if(!empty($remark)){
+        $html.= '<th>Remark</th>';
+      }
+
+      $html .= '<tr/>
+                <tr> ';
+
+
+      if(!empty($remark)){
+        $html.= '<td>'.$remark.'</td>';
+      }else {
+        $html.= '<td></td>';
+      }
+
+
+
+      $html.='</tr>
+              </table>
+
+
+                <!-- Add more form fields as needed -->
+
+                <!-- You can customize the form as needed -->
+             </div>
+          </body>
+          </html>';
+
+$currentDate = date('Ymd');
+
+
+
+$mpdf = new \Mpdf\Mpdf();
+$mpdf->WriteHTML($html);
+
+
+$filename = $username.$staff_id.'_'.$currentDate;
+
+
+
+$mpdf->Output($filename.'.pdf','I');
+
+
+
+
+
+
+
+
+ ?>

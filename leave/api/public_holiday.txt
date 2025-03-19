@@ -1,0 +1,21 @@
+<?php
+
+include '../include.php';
+
+// get last year, this year and next year's holiday
+$years = array(date("Y") - 1, date("Y"), date("Y") + 1);
+$sql = "select * from public_holidays where year IN (".implode(',', $years).") and is_delete='N' order by date ASC;";
+
+$hdb = getConnection();
+$Data=$hdb->query($sql);
+
+$return = array();
+if (count($Data) > 0) {
+    foreach ($Data as $key => $value) {
+        $return[$value['date']] = array("name" => $value['holiday'], "type" => $value['type']);
+    }
+}
+
+print json_encode($return);
+
+?>

@@ -1,0 +1,100 @@
+<?php
+include_once 'include.php';
+
+$company =$_SESSION['login_account']['company'];
+$companyArray = explode(',', $company);
+$firstCompany = $companyArray[0];
+
+$hdb = getConnection();
+$id=$_POST['id'];
+$type = $_POST['type'];
+
+$sql ="select company_name from company where id = $firstCompany";
+$result = $hdb->query($sql);
+if(count($result)>0){
+  $value = $result[0];
+  $company_name = $value['company_name'];
+}
+
+
+
+$save_button_sql ="select save_button_on_leave_form from user where id=$id";
+$result = $hdb->query($save_button_sql);
+$save_button = $result[0]['save_button_on_leave_form'];
+
+
+if($company_name = 'eSeeLYNX'){
+  $type_sql = "and (type = 'federal' or type ='all') or (holiday='Family Day' AND is_delete='N')";
+}else {
+  if($type =='federal'){
+    $type_sql = "and (type = 'federal' or type ='all')";
+  }
+  if($type =='bc'){
+    $type_sql = "and (type = 'bc' or type ='all')";
+  }
+}
+
+
+$sql = "select date from public_holidays where is_delete ='N' $type_sql ";
+$result =   $hdb->query($sql);
+$excludedDateArray = array();
+
+if($save_button =='Y'){
+  foreach ($result as $row) {
+    $excludedDateArray[] = $row['date'];
+  }
+}else {
+  $excludedDateArray = array();
+}
+
+
+
+$default_off_day_sql = "select default_off_day from user where id=$id";
+$result = $hdb->query($default_off_day_sql);
+$default_off_day=$result[0]['default_off_day'];
+$default_off_day = explode(',', $default_off_day);
+
+
+$dayToNumber = [
+  "Monday" => 1,
+  "Tuesday" => 2,
+  "Wednesday"=>3,
+  "Thursday"=>4,
+  "Friday"=>5,
+  "Saturday"=>6,
+  "Sunday"=>7
+];
+
+
+$numbers_day_off = [];
+
+foreach ($default_off_day as $day) {
+  // Check if the day exists in the mapping, and if so, add its corresponding number to the result array
+  if (array_key_exists($day, $dayToNumber)) {
+    $numbers_day_off[] = $dayToNumber[$day];
+  }
+}
+
+
+
+
+
+$startdate = $_POST['startdate'];
+$enddate = $_POST['enddate'];
+//$leave_type= $_POST['leave_type'];
+$single_day_dropdown=$_POST['single_day_dropdown'];
+
+
+$days=countDays($startdate,$enddate,$excludedDateArray,$single_day_dropdown,$numbers_day_off);
+
+
+$response=array('success'=>true,'days'=>$days);
+
+
+echo json_encode($response);
+
+
+
+
+
+?>
